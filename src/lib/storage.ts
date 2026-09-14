@@ -3,6 +3,9 @@ import { isValidDateString } from './date';
 
 export const RECORDS_KEY = 'metabolic.records.v1';
 export const GOAL_KEY = 'metabolic.goal.v1';
+export const META_KEY = 'metabolic.meta.v1';
+/** 読み込めなかった元データの退避先（キー名にこの接尾辞を付ける） */
+export const BROKEN_SUFFIX = '.broken';
 
 const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isOptionalNumber = (v: unknown) => v === undefined || v === null || isFiniteNumber(v);
@@ -35,14 +38,14 @@ export function isGoalSettings(value: unknown): value is GoalSettings {
   );
 }
 
-function normalizeRecord(r: BodyRecord): BodyRecord {
+export function normalizeRecord(r: BodyRecord): BodyRecord {
   const out: BodyRecord = { id: r.id, date: r.date, weight: r.weight };
   if (isFiniteNumber(r.bodyFat)) out.bodyFat = r.bodyFat;
   if (isFiniteNumber(r.skeletalMuscle)) out.skeletalMuscle = r.skeletalMuscle;
   return out;
 }
 
-function normalizeGoal(g: GoalSettings): GoalSettings {
+export function normalizeGoal(g: GoalSettings): GoalSettings {
   const out: GoalSettings = {
     startDate: g.startDate,
     targetDate: g.targetDate,
@@ -51,6 +54,22 @@ function normalizeGoal(g: GoalSettings): GoalSettings {
   if (isFiniteNumber(g.targetBodyFat)) out.targetBodyFat = g.targetBodyFat;
   if (isFiniteNumber(g.targetSkeletalMuscle)) out.targetSkeletalMuscle = g.targetSkeletalMuscle;
   return out;
+}
+
+/**
+ * 記録の配列を検証して取り込む。壊れた要素は除外し、同じ日付は後に出てきたものを採用する。
+ */
+export function sanitizeRecords(items: unknown[]): { records: BodyRecord[]; skipped: number } {
+  const byDate = new Map<string, BodyRecord>();
+  let skipped = 0;
+  for (const item of items) {
+    if (isBodyRecord(item)) {
+      if (byDate.has(item.date)) skipped++;
+      byDate.set(item.date, normalizeRecord(item));
+    } else skipped++;
+  }
+  const records = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  return { records, skipped };
 }
 
 export type LoadResult<T> = { data: T; problem: boolean };
@@ -63,25 +82,34 @@ function safeGetItem(key: string): { raw: string | null; problem: boolean } {
   }
 }
 
-/**
- * 記録を読み込む。壊れたデータは読み飛ばし、アプリは落とさない。
- * 同じ日付が複数ある場合は後に出てきたものを採用する。
- */
+/** 読み込めなかった元データを別キーに退避し、次の保存で上書きされても失われないようにする */
+function preserveBroken(key: string, raw: string) {
+  try {
+    const brokenKey = key + BROKEN_SUFFIX;
+    if (window.localStorage.getItem(brokenKey) === null) {
+      window.localStorage.setItem(brokenKey, raw);
+    }
+  } catch {
+    // 退避できなくてもアプリは続行する
+  }
+}
+
+/** 記録を読み込む。壊れたデータは読み飛ばし、アプリは落とさない。 */
 export function loadRecords(): LoadResult<BodyRecord[]> {
   const { raw, problem } = safeGetItem(RECORDS_KEY);
   if (raw === null) return { data: [], problem };
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return { data: [], problem: true };
-    const byDate = new Map<string, BodyRecord>();
-    let dropped = false;
-    for (const item of parsed) {
-      if (isBodyRecord(item)) byDate.set(item.date, normalizeRecord(item));
-      else dropped = true;
+    if (!Array.isArray(parsed)) {
+      preserveBroken(RECORDS_KEY, raw);
+      return { data: [], problem: true };
     }
-    const data = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-    return { data, problem: dropped };
+    const { records } = sanitizeRecords(parsed);
+    const dropped = parsed.some((item) => !isBodyRecord(item));
+    if (dropped) preserveBroken(RECORDS_KEY, raw);
+    return { data: records, problem: dropped };
   } catch {
+    preserveBroken(RECORDS_KEY, raw);
     return { data: [], problem: true };
   }
 }
@@ -91,12 +119,12 @@ export function loadGoal(): LoadResult<GoalSettings | null> {
   if (raw === null) return { data: null, problem };
   try {
     const parsed: unknown = JSON.parse(raw);
-    return isGoalSettings(parsed)
-      ? { data: normalizeGoal(parsed), problem: false }
-      : { data: null, problem: true };
+    if (isGoalSettings(parsed)) return { data: normalizeGoal(parsed), problem: false };
   } catch {
-    return { data: null, problem: true };
+    // 下で退避する
   }
+  preserveBroken(GOAL_KEY, raw);
+  return { data: null, problem: true };
 }
 
 function safeSetItem(key: string, value: string): boolean {
@@ -122,4 +150,22 @@ export function saveGoal(goal: GoalSettings | null): boolean {
     }
   }
   return safeSetItem(GOAL_KEY, JSON.stringify(goal));
+}
+
+export type AppMeta = { lastBackupAt?: string };
+
+export function loadMeta(): AppMeta {
+  const { raw } = safeGetItem(META_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown> | null;
+    const last = parsed?.lastBackupAt;
+    return typeof last === 'string' && !Number.isNaN(Date.parse(last)) ? { lastBackupAt: last } : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveMeta(meta: AppMeta): boolean {
+  return safeSetItem(META_KEY, JSON.stringify(meta));
 }

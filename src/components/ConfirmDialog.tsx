@@ -5,7 +5,10 @@ export type ConfirmOptions = {
   message?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** 削除などの取り返しにくい操作 */
   danger?: boolean;
+  /** 指定した文字を入力するまで実行ボタンを押せないようにする */
+  requireText?: string;
 };
 
 type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>;
@@ -16,9 +19,14 @@ type Pending = ConfirmOptions & { resolve: (ok: boolean) => void };
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [pending, setPending] = useState<Pending | null>(null);
+  const [typed, setTyped] = useState('');
 
   const confirm = useCallback<ConfirmFn>(
-    (options) => new Promise<boolean>((resolve) => setPending({ ...options, resolve })),
+    (options) =>
+      new Promise<boolean>((resolve) => {
+        setTyped('');
+        setPending({ ...options, resolve });
+      }),
     [],
   );
 
@@ -39,13 +47,16 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [pending, close]);
 
+  const needsText = pending?.requireText !== undefined;
+  const canConfirm = !needsText || typed.trim() === pending?.requireText;
+
   return (
     <ConfirmContext.Provider value={confirm}>
       {children}
       {pending && (
         <div className="dialog-backdrop" onClick={() => close(false)}>
           <div
-            className="dialog"
+            className={`dialog ${pending.danger ? 'dialog-danger' : ''}`}
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="confirm-title"
@@ -55,15 +66,39 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               {pending.title}
             </h2>
             {pending.message && <div className="dialog-message">{pending.message}</div>}
+            {needsText && (
+              <div className="field">
+                <label htmlFor="confirm-text" className="field-label">
+                  確認のため「{pending.requireText}」と入力してください
+                </label>
+                <input
+                  id="confirm-text"
+                  className="text-input"
+                  type="text"
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  value={typed}
+                  onChange={(e) => setTyped(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            )}
             <div className="dialog-actions">
-              <button type="button" className="btn btn-secondary" onClick={() => close(false)}>
+              {/* 危険な操作では、うっかり実行しないよう「キャンセル」に初期フォーカスを置く */}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => close(false)}
+                autoFocus={!needsText && pending.danger}
+              >
                 {pending.cancelLabel ?? 'キャンセル'}
               </button>
               <button
                 type="button"
                 className={`btn ${pending.danger ? 'btn-danger' : 'btn-primary'}`}
-                onClick={() => close(true)}
-                autoFocus
+                disabled={!canConfirm}
+                onClick={() => canConfirm && close(true)}
+                autoFocus={!needsText && !pending.danger}
               >
                 {pending.confirmLabel ?? 'OK'}
               </button>

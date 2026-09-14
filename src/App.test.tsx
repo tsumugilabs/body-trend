@@ -1,11 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
-import { GOAL_KEY, RECORDS_KEY } from './lib/storage';
+import { GOAL_KEY, META_KEY, RECORDS_KEY } from './lib/storage';
 import { addDays, todayString } from './lib/date';
+import { readTextFile } from './lib/fileSave';
 
 const today = todayString();
+const yesterday = addDays(today, -1);
 
 function seedGoal() {
   localStorage.setItem(
@@ -13,6 +15,12 @@ function seedGoal() {
     JSON.stringify({ startDate: addDays(today, -10), targetDate: addDays(today, 30), targetWeight: 65 }),
   );
 }
+
+const storedRecords = () => JSON.parse(localStorage.getItem(RECORDS_KEY) ?? '[]') as unknown[];
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('App', () => {
   it('初回は目標設定を表示し、設定後にダッシュボードへ移動する', async () => {
@@ -48,9 +56,7 @@ describe('App', () => {
     const hero = screen.getByRole('region', { name: '現在の体重' });
     expect(within(hero).getByText('70.4')).toBeInTheDocument();
     expect(within(hero).getByText('あと 5.4 kg')).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem(RECORDS_KEY)!)).toMatchObject([
-      { date: today, weight: 70.4, bodyFat: 24.5 },
-    ]);
+    expect(storedRecords()).toMatchObject([{ date: today, weight: 70.4, bodyFat: 24.5 }]);
   });
 
   it('同じ日付の記録は確認してから更新する', async () => {
@@ -68,8 +74,7 @@ describe('App', () => {
     await user.click(within(dialog).getByRole('button', { name: '更新する' }));
 
     expect(await screen.findByText('記録を更新しました')).toBeInTheDocument();
-    const saved = JSON.parse(localStorage.getItem(RECORDS_KEY)!);
-    expect(saved).toEqual([{ id: 'x', date: today, weight: 69.8 }]);
+    expect(storedRecords()).toEqual([{ id: 'x', date: today, weight: 69.8 }]);
   });
 
   it('不正な値はエラーを表示して保存しない', async () => {
@@ -88,15 +93,14 @@ describe('App', () => {
     expect(localStorage.getItem(RECORDS_KEY)).toBeNull();
   });
 
-  it('履歴から編集・削除（確認あり）ができる', async () => {
+  it('履歴から削除するときは内容を見せて確認し、削除後に元に戻せる', async () => {
     const user = userEvent.setup();
     seedGoal();
-    const yesterday = addDays(today, -1);
     localStorage.setItem(
       RECORDS_KEY,
       JSON.stringify([
         { id: 'a', date: yesterday, weight: 71 },
-        { id: 'b', date: today, weight: 70.5 },
+        { id: 'b', date: today, weight: 70.5, bodyFat: 24.1 },
       ]),
     );
     render(<App enableSample={false} />);
@@ -107,12 +111,31 @@ describe('App', () => {
     expect(within(items[0]).getByText('70.5')).toBeInTheDocument();
 
     await user.click(screen.getAllByRole('button', { name: /の記録を削除/ })[0]);
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'キャンセル' }));
+    let dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/体重 70.5kg ・ 体脂肪率 24.1%/)).toBeInTheDocument();
+    // 危険な操作では「キャンセル」が初期フォーカス
+    expect(within(dialog).getByRole('button', { name: 'キャンセル' })).toHaveFocus();
+    await user.click(within(dialog).getByRole('button', { name: 'キャンセル' }));
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
 
     await user.click(screen.getAllByRole('button', { name: /の記録を削除/ })[0]);
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '削除する' }));
+    dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: '削除する' }));
     expect(screen.getAllByRole('listitem')).toHaveLength(1);
+    expect(storedRecords()).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: '元に戻す' }));
+    expect(await screen.findByText('削除を取り消しました')).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(storedRecords()).toHaveLength(2);
+  });
+
+  it('履歴から編集できる', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    localStorage.setItem(RECORDS_KEY, JSON.stringify([{ id: 'a', date: yesterday, weight: 71 }]));
+    render(<App enableSample={false} />);
+    await user.click(screen.getByRole('button', { name: '履歴' }));
 
     await user.click(screen.getByRole('button', { name: /の記録を編集/ }));
     const weight = screen.getByLabelText(/^体重/);
@@ -122,7 +145,122 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '変更を保存する' }));
 
     expect(await screen.findByText('記録を更新しました')).toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem(RECORDS_KEY)!)).toEqual([{ id: 'a', date: yesterday, weight: 70.8 }]);
+    expect(storedRecords()).toEqual([{ id: 'a', date: yesterday, weight: 70.8 }]);
+  });
+
+  it('すべて削除は「削除」と入力するまで実行できず、削除後に元に戻せる', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    localStorage.setItem(RECORDS_KEY, JSON.stringify([{ id: 'a', date: yesterday, weight: 71 }]));
+    render(<App enableSample={false} />);
+    await user.click(screen.getByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: 'すべてのデータを削除' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/バックアップがまだ保存されていません/)).toBeInTheDocument();
+    const deleteButton = within(dialog).getByRole('button', { name: '削除する' });
+    expect(deleteButton).toBeDisabled();
+    await user.type(within(dialog).getByLabelText(/確認のため/), 'さくじょ');
+    expect(deleteButton).toBeDisabled();
+    await user.clear(within(dialog).getByLabelText(/確認のため/));
+    await user.type(within(dialog).getByLabelText(/確認のため/), '削除');
+    expect(deleteButton).toBeEnabled();
+    await user.click(deleteButton);
+
+    expect(screen.getByRole('heading', { name: 'からだ記録へようこそ' })).toBeInTheDocument();
+    expect(storedRecords()).toEqual([]);
+    expect(localStorage.getItem(GOAL_KEY)).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: '元に戻す' }));
+    expect(await screen.findByText('元に戻しました')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'メインメニュー' })).toBeInTheDocument();
+    expect(storedRecords()).toHaveLength(1);
+    expect(localStorage.getItem(GOAL_KEY)).not.toBeNull();
+  });
+
+  it('別の画面で保存された記録を、開いたままの古い画面が上書きしない', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    render(<App enableSample={false} />);
+
+    // 画面を開いた後に、別のタブ（または PWA）で記録が追加された
+    localStorage.setItem(RECORDS_KEY, JSON.stringify([{ id: 'other', date: yesterday, weight: 71.2 }]));
+
+    await user.click(screen.getByRole('button', { name: '記録する' }));
+    await user.type(screen.getByLabelText(/^体重/), '70.9');
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(await screen.findByText('記録しました')).toBeInTheDocument();
+    expect(storedRecords()).toMatchObject([
+      { id: 'other', date: yesterday, weight: 71.2 },
+      { date: today, weight: 70.9 },
+    ]);
+  });
+
+  it('バックアップを保存し、初回画面からそのファイルで復元できる', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    localStorage.setItem(RECORDS_KEY, JSON.stringify([{ id: 'a', date: yesterday, weight: 70 }]));
+
+    const blobs: Blob[] = [];
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      blobs.push(blob);
+      return 'blob:backup';
+    }) as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    const { unmount } = render(<App enableSample={false} />);
+    await user.click(screen.getByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: 'バックアップを保存' }));
+    expect(await screen.findByText('バックアップファイルを保存しました')).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(META_KEY)!).lastBackupAt).toBeTruthy();
+    expect(blobs).toHaveLength(1);
+    const backupText = await readTextFile(blobs[0]);
+
+    // 機種変更などで空になった状態を想定
+    unmount();
+    localStorage.clear();
+    render(<App enableSample={false} />);
+    expect(screen.getByRole('heading', { name: 'からだ記録へようこそ' })).toBeInTheDocument();
+
+    const file = new File([backupText], 'body-trend-backup.json', { type: 'application/json' });
+    await user.upload(screen.getByLabelText('バックアップファイルを選択'), file);
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/記録 1件/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: '復元する' }));
+
+    expect(await screen.findByText('バックアップから復元しました（1件）')).toBeInTheDocument();
+    const hero = screen.getByRole('region', { name: '現在の体重' });
+    expect(within(hero).getByText('70.0')).toBeInTheDocument();
+    expect(storedRecords()).toEqual([{ id: 'a', date: yesterday, weight: 70 }]);
+  });
+
+  it('記録が減る復元は「復元」と入力しないと実行できない', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    localStorage.setItem(
+      RECORDS_KEY,
+      JSON.stringify([
+        { id: 'a', date: yesterday, weight: 71 },
+        { id: 'b', date: today, weight: 70.5 },
+      ]),
+    );
+    render(<App enableSample={false} />);
+    await user.click(screen.getByRole('button', { name: '設定' }));
+
+    const backup = JSON.stringify({
+      app: 'body-trend',
+      version: 1,
+      records: [{ id: 'a', date: yesterday, weight: 71 }],
+      goal: null,
+    });
+    await user.upload(screen.getByLabelText('バックアップファイルを選択'), new File([backup], 'b.json'));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/1件 少ない/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '復元する' })).toBeDisabled();
+    await user.click(within(dialog).getByRole('button', { name: 'キャンセル' }));
+    expect(storedRecords()).toHaveLength(2);
   });
 
   it('保存データが壊れていてもアプリを表示する', () => {

@@ -20,7 +20,18 @@ export function History({ records, today, onEdit, onDelete, onRecord }: Props) {
   const handleDelete = async (record: BodyRecord) => {
     const ok = await confirm({
       title: `${formatShort(record.date)}の記録を削除しますか？`,
-      message: <p>体重 {formatNumber(record.weight)}kg の記録を削除します。この操作は元に戻せません。</p>,
+      message: (
+        <>
+          <dl className="compare">
+            <dt>削除する記録</dt>
+            <dd>
+              {formatShort(record.date)} ・ 体重 {formatNumber(record.weight)}kg ・ 体脂肪率{' '}
+              {formatNumber(record.bodyFat)}% ・ 骨格筋率 {formatNumber(record.skeletalMuscle)}%
+            </dd>
+          </dl>
+          <p>削除した直後に表示される「元に戻す」で取り消せます。</p>
+        </>
+      ),
       confirmLabel: '削除する',
       danger: true,
     });
