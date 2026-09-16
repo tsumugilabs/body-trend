@@ -289,6 +289,11 @@ h2 {
   gap: 12px;
 }
 
+/* 項目が奇数のとき、最後の1枚は横いっぱいに広げる */
+.stat-grid > :last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .mini-value {
   font-size: 34px;
   font-weight: 700;
@@ -376,6 +381,12 @@ h2 {
   background: #fff;
   color: var(--primary-dark);
   box-shadow: 0 1px 3px rgba(20, 50, 48, 0.12);
+}
+
+/* 項目が4つ並ぶので少し小さくする */
+.segmented-metrics button {
+  font-size: 14px;
+  padding: 4px 0;
 }
 
 .segmented-small button {

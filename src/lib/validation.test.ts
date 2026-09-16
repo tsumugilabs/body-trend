@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyRecord } from '../types';
-import { parseDecimal, validateGoal, validateRecord } from './validation';
+import { parseDecimal, validateGoal, validateRecord, type GoalInput, type RecordInput } from './validation';
 
 const today = '2026-09-14';
-const input = (over: Partial<Record<'date' | 'weight' | 'bodyFat' | 'skeletalMuscle', string>> = {}) => ({
+const input = (over: Partial<RecordInput> = {}): RecordInput => ({
   date: today,
   weight: '70.5',
   bodyFat: '',
   skeletalMuscle: '',
+  waist: '',
   ...over,
 });
 
@@ -44,6 +45,7 @@ describe('validateRecord', () => {
   it('明らかな入力ミスはエラー、珍しい値は確認', () => {
     expect(validateRecord(input({ weight: '705' }), { today, records: [] }).errors.weight).toMatch(/範囲/);
     expect(validateRecord(input({ bodyFat: '80' }), { today, records: [] }).errors.bodyFat).toMatch(/範囲/);
+    expect(validateRecord(input({ waist: '250' }), { today, records: [] }).errors.waist).toMatch(/範囲/);
     const soft = validateRecord(input({ weight: '210' }), { today, records: [] });
     expect(soft.values).toBeDefined();
     expect(soft.warnings[0]).toMatch(/一般的な範囲/);
@@ -64,12 +66,13 @@ describe('validateRecord', () => {
 });
 
 describe('validateGoal', () => {
-  const goal = {
+  const goal: GoalInput = {
     startDate: '2026-09-01',
     targetDate: '2026-12-31',
     targetWeight: '65',
     targetBodyFat: '',
     targetSkeletalMuscle: '',
+    targetWaist: '',
   };
 
   it('正しい目標を受け付ける（任意項目は省略可）', () => {

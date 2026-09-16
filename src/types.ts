@@ -5,6 +5,8 @@ export type BodyRecord = {
   weight: number;
   bodyFat?: number;
   skeletalMuscle?: number;
+  /** 腹囲（cm） */
+  waist?: number;
 };
 
 export type GoalSettings = {
@@ -15,9 +17,10 @@ export type GoalSettings = {
   targetWeight: number;
   targetBodyFat?: number;
   targetSkeletalMuscle?: number;
+  targetWaist?: number;
 };
 
-export type MetricKey = 'weight' | 'bodyFat' | 'skeletalMuscle';
+export type MetricKey = 'weight' | 'bodyFat' | 'skeletalMuscle' | 'waist';
 
 export type PeriodKey = '7' | '30' | '90' | 'all';
 

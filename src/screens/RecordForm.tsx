@@ -18,8 +18,8 @@ type Props = {
 
 const toInput = (n: number | undefined) => (n === undefined ? '' : n.toFixed(1));
 
-const describe = (r: Pick<BodyRecord, 'weight' | 'bodyFat' | 'skeletalMuscle'>) =>
-  `体重 ${formatNumber(r.weight)}kg / 体脂肪率 ${formatNumber(r.bodyFat)}% / 骨格筋率 ${formatNumber(r.skeletalMuscle)}%`;
+const describe = (r: Pick<BodyRecord, 'weight' | 'bodyFat' | 'skeletalMuscle' | 'waist'>) =>
+  `体重 ${formatNumber(r.weight)}kg / 体脂肪率 ${formatNumber(r.bodyFat)}% / 骨格筋率 ${formatNumber(r.skeletalMuscle)}% / 腹囲 ${formatNumber(r.waist)}cm`;
 
 export function RecordForm({ records, today, editing, onSave, onCancel }: Props) {
   const confirm = useConfirm();
@@ -28,6 +28,7 @@ export function RecordForm({ records, today, editing, onSave, onCancel }: Props)
     weight: toInput(editing?.weight),
     bodyFat: toInput(editing?.bodyFat),
     skeletalMuscle: toInput(editing?.skeletalMuscle),
+    waist: toInput(editing?.waist),
   }));
   const [errors, setErrors] = useState<FieldErrors>({});
   const [busy, setBusy] = useState(false);
@@ -137,6 +138,15 @@ export function RecordForm({ records, today, editing, onSave, onCancel }: Props)
           onChange={update('skeletalMuscle')}
           error={errors.skeletalMuscle}
           placeholder="例 30.0"
+        />
+        <NumberField
+          id="record-waist"
+          label="腹囲"
+          unit="cm"
+          value={input.waist}
+          onChange={update('waist')}
+          error={errors.waist}
+          placeholder="例 82.0"
         />
         <button type="submit" className="btn btn-primary btn-block btn-large" disabled={busy}>
           {editing ? '変更を保存する' : '保存する'}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { BodyRecord, GoalSettings, TabKey } from './types';
-import { useAppData } from './hooks/useAppData';
+import { useAppData, type DataSnapshot } from './hooks/useAppData';
 import { useToday } from './hooks/useToday';
 import { createSampleData } from './lib/sampleData';
 import { isBackupDue, type BackupData } from './lib/backup';
@@ -58,13 +58,42 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
   };
 
   /** 全体を置き換える操作を取り消すための「元に戻す」 */
-  const undoReplace = (prevRecords: BodyRecord[], prevGoal: GoalSettings | null): ToastAction => ({
+  const undoReplace = (before: DataSnapshot, applied: DataSnapshot): ToastAction => ({
     label: '元に戻す',
     onClick: () => {
-      const ok = data.replaceAll(prevRecords, prevGoal);
-      notify(ok ? '元に戻しました' : SAVE_FAILED, { tone: ok ? 'info' : 'error' });
+      const { ok, kept } = data.undoReplaceAll(before, applied);
+      if (!ok) {
+        notify(SAVE_FAILED, { tone: 'error' });
+        return;
+      }
+      notify(kept > 0 ? `元に戻しました（そのあとの変更 ${kept}件 は残しています）` : '元に戻しました', {
+        tone: 'info',
+      });
     },
   });
+
+  /**
+   * 記録と目標をまとめて置き換え、取り消し用の「元に戻す」を用意する。
+   * hadData: 置き換える前にデータがあったか（なければ取り消しは不要）
+   */
+  const replaceAll = (
+    nextRecords: BodyRecord[],
+    nextGoal: GoalSettings | null,
+    options: { clearBackupMark?: boolean } = {},
+  ): { ok: boolean; undo: ToastAction; hadData: boolean } => {
+    const before = data.snapshot();
+    const ok = data.replaceAll(nextRecords, nextGoal, options);
+    const applied: DataSnapshot = {
+      records: nextRecords,
+      goal: nextGoal,
+      lastBackupAt: options.clearBackupMark ? undefined : before.lastBackupAt,
+    };
+    return {
+      ok,
+      undo: undoReplace(before, applied),
+      hadData: before.records.length > 0 || before.goal !== null,
+    };
+  };
 
   const handleSaveRecord = (record: BodyRecord, mode: 'created' | 'updated') => {
     const ok = data.saveRecord(record);
@@ -99,36 +128,29 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
   };
 
   const handleRestore = (backup: BackupData) => {
-    const prevRecords = data.records;
-    const prevGoal = data.goal;
-    const ok = data.replaceAll(backup.records, backup.goal ?? prevGoal);
+    const { ok, undo, hadData } = replaceAll(backup.records, backup.goal ?? data.goal);
     navigate('home');
     if (!ok) notify(SAVE_FAILED, { tone: 'error' });
     else
       notify(`バックアップから復元しました（${backup.records.length}件）`, {
-        action: prevRecords.length > 0 || prevGoal ? undoReplace(prevRecords, prevGoal) : undefined,
+        action: hadData ? undo : undefined,
       });
   };
 
   const handleClearAll = () => {
-    const prevRecords = data.records;
-    const prevGoal = data.goal;
-    const ok = data.replaceAll([], null);
+    // 最終バックアップ日時も消す（残すと、消したデータのバックアップを最新として扱ってしまう）
+    const { ok, undo } = replaceAll([], null, { clearBackupMark: true });
     navigate('home');
     if (!ok) notify(SAVE_FAILED, { tone: 'error' });
-    else notify('すべてのデータを削除しました', { action: undoReplace(prevRecords, prevGoal) });
+    else notify('すべてのデータを削除しました', { action: undo });
   };
 
   const loadSample = enableSample
     ? () => {
-        const prevRecords = data.records;
-        const prevGoal = data.goal;
         const sample = createSampleData(today);
-        data.replaceAll(sample.records, sample.goal);
+        const { undo, hadData } = replaceAll(sample.records, sample.goal);
         navigate('home');
-        notify('サンプルデータを読み込みました', {
-          action: prevRecords.length > 0 ? undoReplace(prevRecords, prevGoal) : undefined,
-        });
+        notify('サンプルデータを読み込みました', { action: hadData ? undo : undefined });
       }
     : undefined;
 

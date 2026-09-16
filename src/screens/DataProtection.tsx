@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { BodyRecord, GoalSettings } from '../types';
-import { backupFileName, createBackup, parseBackup, type BackupData } from '../lib/backup';
-import { formatDateTime } from '../lib/date';
+import {
+  backupFileName,
+  createBackup,
+  parseBackup,
+  recordsLostByRestore,
+  type BackupData,
+} from '../lib/backup';
+import { formatDateTime, formatShort } from '../lib/date';
 import { readTextFile, saveTextFile } from '../lib/fileSave';
 import {
   getProtectionStatus,
@@ -52,7 +58,14 @@ export function RestoreButton({
 
     const data = result.data;
     const hasCurrent = records.length > 0;
-    const fewer = hasCurrent && data.records.length < records.length;
+    // 件数ではなく、置き換えで実際に消える記録（バックアップに同じ日付がないもの）で判断する
+    const lost = recordsLostByRestore(records, data.records);
+    const lostRange =
+      lost.length === 0
+        ? ''
+        : lost.length === 1
+          ? formatShort(lost[0].date)
+          : `${formatShort(lost[0].date)}〜${formatShort(lost[lost.length - 1].date)}`;
     const ok = await confirm({
       title: 'バックアップから復元しますか？',
       message: (
@@ -71,9 +84,9 @@ export function RestoreButton({
             <dt>目標</dt>
             <dd>{data.goal ? 'バックアップの目標にする' : goal ? '現在の目標をそのまま使う' : '未設定'}</dd>
           </dl>
-          {fewer && (
+          {lost.length > 0 && (
             <p className="dialog-warning">
-              バックアップの記録は現在より {records.length - data.records.length}件 少ないため、その分の記録が消えます。
+              現在の記録のうち {lost.length}件（{lostRange}）はバックアップに含まれないため消えます。
             </p>
           )}
           {data.skipped > 0 && <p>読み込めない記録 {data.skipped}件 は除外されます。</p>}
@@ -81,7 +94,7 @@ export function RestoreButton({
       ),
       confirmLabel: '復元する',
       danger: hasCurrent,
-      requireText: fewer ? '復元' : undefined,
+      requireText: lost.length > 0 ? '復元' : undefined,
     });
     if (ok) onRestore(data);
   };

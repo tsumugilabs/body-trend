@@ -10,7 +10,7 @@ export type MetricDef = {
   goodDirection: 'down' | 'up';
   /** 記録が少ないときの Y 軸の最小幅 */
   minSpan: number;
-  goalKey: 'targetWeight' | 'targetBodyFat' | 'targetSkeletalMuscle';
+  goalKey: 'targetWeight' | 'targetBodyFat' | 'targetSkeletalMuscle' | 'targetWaist';
 };
 
 export const METRICS: Record<MetricKey, MetricDef> = {
@@ -41,9 +41,18 @@ export const METRICS: Record<MetricKey, MetricDef> = {
     minSpan: 2,
     goalKey: 'targetSkeletalMuscle',
   },
+  waist: {
+    key: 'waist',
+    label: '腹囲',
+    unit: 'cm',
+    diffUnit: 'cm',
+    goodDirection: 'down',
+    minSpan: 2,
+    goalKey: 'targetWaist',
+  },
 };
 
-export const METRIC_ORDER: MetricKey[] = ['weight', 'bodyFat', 'skeletalMuscle'];
+export const METRIC_ORDER: MetricKey[] = ['weight', 'bodyFat', 'skeletalMuscle', 'waist'];
 
 export function metricValue(record: BodyRecord, key: MetricKey): number | undefined {
   return record[key];

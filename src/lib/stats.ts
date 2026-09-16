@@ -8,6 +8,7 @@ export type DashboardSummary = {
   latest?: BodyRecord;
   latestBodyFat: LatestValue;
   latestSkeletalMuscle: LatestValue;
+  latestWaist: LatestValue;
   /** 目標日までの残り日数（過ぎていれば負） */
   daysLeft?: number;
   /** 基準にした開始時の記録 */
@@ -48,6 +49,7 @@ export function summarize(
     latest,
     latestBodyFat: latestWith(records, 'bodyFat'),
     latestSkeletalMuscle: latestWith(records, 'skeletalMuscle'),
+    latestWaist: latestWith(records, 'waist'),
   };
   if (goal) summary.daysLeft = diffDays(today, goal.targetDate);
   if (latest) {

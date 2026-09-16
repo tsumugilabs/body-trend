@@ -17,6 +17,7 @@ function seedGoal() {
 }
 
 const storedRecords = () => JSON.parse(localStorage.getItem(RECORDS_KEY) ?? '[]') as unknown[];
+const storedMeta = () => JSON.parse(localStorage.getItem(META_KEY) ?? '{}') as { lastBackupAt?: string };
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -178,6 +179,51 @@ describe('App', () => {
     expect(localStorage.getItem(GOAL_KEY)).not.toBeNull();
   });
 
+  it('すべて削除で最終バックアップ日時も消し、元に戻すと戻る', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    localStorage.setItem(RECORDS_KEY, JSON.stringify([{ id: 'a', date: yesterday, weight: 71 }]));
+    localStorage.setItem(META_KEY, JSON.stringify({ lastBackupAt: '2026-09-01T00:00:00.000Z' }));
+    render(<App enableSample={false} />);
+    await user.click(screen.getByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: 'すべてのデータを削除' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    await user.type(within(dialog).getByLabelText(/確認のため/), '削除');
+    await user.click(within(dialog).getByRole('button', { name: '削除する' }));
+
+    // 消したデータのバックアップを「最新」として扱わないよう、日時も消す
+    expect(storedMeta().lastBackupAt).toBeUndefined();
+
+    await user.click(screen.getByRole('button', { name: '元に戻す' }));
+    expect(await screen.findByText('元に戻しました')).toBeInTheDocument();
+    expect(storedMeta().lastBackupAt).toBe('2026-09-01T00:00:00.000Z');
+  });
+
+  it('元に戻すまでのあいだに別の画面が加えた記録は消さない', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    localStorage.setItem(RECORDS_KEY, JSON.stringify([{ id: 'a', date: yesterday, weight: 71 }]));
+    render(<App enableSample={false} />);
+    await user.click(screen.getByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: 'すべてのデータを削除' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    await user.type(within(dialog).getByLabelText(/確認のため/), '削除');
+    await user.click(within(dialog).getByRole('button', { name: '削除する' }));
+    expect(storedRecords()).toEqual([]);
+
+    // 取り消せるあいだに、別のタブ（または PWA）で今日の記録が追加された
+    localStorage.setItem(RECORDS_KEY, JSON.stringify([{ id: 'other', date: today, weight: 70.2 }]));
+
+    await user.click(screen.getByRole('button', { name: '元に戻す' }));
+    expect(await screen.findByText(/元に戻しました（そのあとの変更 1件 は残しています）/)).toBeInTheDocument();
+    expect(storedRecords()).toMatchObject([
+      { id: 'a', date: yesterday, weight: 71 },
+      { id: 'other', date: today, weight: 70.2 },
+    ]);
+  });
+
   it('別の画面で保存された記録を、開いたままの古い画面が上書きしない', async () => {
     const user = userEvent.setup();
     seedGoal();
@@ -257,7 +303,38 @@ describe('App', () => {
     });
     await user.upload(screen.getByLabelText('バックアップファイルを選択'), new File([backup], 'b.json'));
     const dialog = await screen.findByRole('alertdialog');
-    expect(within(dialog).getByText(/1件 少ない/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/1件（.+）はバックアップに含まれない/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '復元する' })).toBeDisabled();
+    await user.click(within(dialog).getByRole('button', { name: 'キャンセル' }));
+    expect(storedRecords()).toHaveLength(2);
+  });
+
+  it('件数が同じでも日付が違う復元は、消える記録を示して「復元」の入力を求める', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    localStorage.setItem(
+      RECORDS_KEY,
+      JSON.stringify([
+        { id: 'a', date: yesterday, weight: 71 },
+        { id: 'b', date: today, weight: 70.5 },
+      ]),
+    );
+    render(<App enableSample={false} />);
+    await user.click(screen.getByRole('button', { name: '設定' }));
+
+    // 件数は同じだが、どちらの日付も現在の記録にはない
+    const backup = JSON.stringify({
+      app: 'body-trend',
+      version: 1,
+      records: [
+        { id: 'c', date: addDays(today, -30), weight: 74 },
+        { id: 'd', date: addDays(today, -29), weight: 73.8 },
+      ],
+      goal: null,
+    });
+    await user.upload(screen.getByLabelText('バックアップファイルを選択'), new File([backup], 'b.json'));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/2件（.+）はバックアップに含まれない/)).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: '復元する' })).toBeDisabled();
     await user.click(within(dialog).getByRole('button', { name: 'キャンセル' }));
     expect(storedRecords()).toHaveLength(2);
