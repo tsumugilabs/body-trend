@@ -9,6 +9,10 @@ type Props = {
   goal: GoalSettings | null;
   today: string;
   onRecord: () => void;
+  /** バックアップを促すか */
+  backupDue?: boolean;
+  lastBackupAt?: string;
+  onOpenBackup?: () => void;
 };
 
 function daysLeftText(daysLeft: number | undefined) {
@@ -23,7 +27,15 @@ function daysLeftText(daysLeft: number | undefined) {
   return <>目標日から {-daysLeft} 日経過</>;
 }
 
-export function Dashboard({ records, goal, today, onRecord }: Props) {
+export function Dashboard({
+  records,
+  goal,
+  today,
+  onRecord,
+  backupDue,
+  lastBackupAt,
+  onOpenBackup,
+}: Props) {
   const s = summarize(records, goal, today);
   const recordedToday = s.latest?.date === today;
 
@@ -80,6 +92,20 @@ export function Dashboard({ records, goal, today, onRecord }: Props) {
       </div>
 
       <TrendChart records={records} goal={goal} today={today} onRecord={onRecord} />
+
+      {backupDue && onOpenBackup && (
+        <section className="card notice" aria-label="バックアップのお知らせ">
+          <p>
+            {lastBackupAt
+              ? '前回のバックアップから30日以上たちました。'
+              : '記録のバックアップがまだありません。'}
+            機種変更やデータ消去に備えて保存しておくと安心です。
+          </p>
+          <button type="button" className="btn btn-secondary btn-small" onClick={onOpenBackup}>
+            バックアップへ
+          </button>
+        </section>
+      )}
     </div>
   );
 }

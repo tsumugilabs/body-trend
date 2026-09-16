@@ -1,25 +1,57 @@
 import type { BodyRecord, GoalSettings } from '../types';
+import type { BackupData } from '../lib/backup';
+import { formatDateTime } from '../lib/date';
 import { useConfirm } from '../components/ConfirmDialog';
+import type { Notify } from '../components/Toast';
 import { GoalForm } from './GoalForm';
+import { DataProtection } from './DataProtection';
 
 type Props = {
   goal: GoalSettings | null;
   records: BodyRecord[];
   today: string;
+  lastBackupAt?: string;
+  notify: Notify;
   onSaveGoal: (goal: GoalSettings) => void;
+  onBackedUp: (iso: string) => void;
+  onRestore: (data: BackupData) => void;
   onClearAll: () => void;
   onLoadSample?: () => void;
 };
 
-export function Settings({ goal, records, today, onSaveGoal, onClearAll, onLoadSample }: Props) {
+export function Settings({
+  goal,
+  records,
+  today,
+  lastBackupAt,
+  notify,
+  onSaveGoal,
+  onBackedUp,
+  onRestore,
+  onClearAll,
+  onLoadSample,
+}: Props) {
   const confirm = useConfirm();
 
   const handleClear = async () => {
     const ok = await confirm({
       title: 'すべてのデータを削除しますか？',
-      message: <p>{records.length}件の記録と目標設定を削除します。この操作は元に戻せません。</p>,
+      message: (
+        <>
+          <p>
+            記録 {records.length}件 と目標設定を、この端末から削除します。
+          </p>
+          <p className="dialog-warning">
+            {lastBackupAt
+              ? `最終バックアップは ${formatDateTime(lastBackupAt)} です。`
+              : 'バックアップがまだ保存されていません。'}
+            削除する前に「バックアップを保存」しておくことをおすすめします。
+          </p>
+        </>
+      ),
       confirmLabel: '削除する',
       danger: true,
+      requireText: '削除',
     });
     if (ok) onClearAll();
   };
@@ -30,6 +62,7 @@ export function Settings({ goal, records, today, onSaveGoal, onClearAll, onLoadS
       title: 'サンプルデータを読み込みますか？',
       message: <p>現在の記録と目標は置き換えられます（開発用の機能です）。</p>,
       confirmLabel: '読み込む',
+      danger: true,
     });
     if (ok) onLoadSample();
   };
@@ -46,11 +79,20 @@ export function Settings({ goal, records, today, onSaveGoal, onClearAll, onLoadS
         onSubmit={onSaveGoal}
       />
 
-      <h2 className="section-title">データ</h2>
+      <h2 className="section-title">データの保護</h2>
+      <DataProtection
+        records={records}
+        goal={goal}
+        today={today}
+        lastBackupAt={lastBackupAt}
+        notify={notify}
+        onBackedUp={onBackedUp}
+        onRestore={onRestore}
+      />
+
+      <h2 className="section-title">データの削除</h2>
       <div className="card settings-data">
-        <p className="muted">
-          記録はこの端末のブラウザ内にだけ保存されます（{records.length}件）。ブラウザのデータを消去すると記録も消えます。
-        </p>
+        <p className="muted">削除した記録は、直後に表示される「元に戻す」以外では取り戻せません。</p>
         {onLoadSample && (
           <button type="button" className="btn btn-secondary btn-block" onClick={handleSample}>
             サンプルデータを読み込む（開発用）

@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GOAL_KEY, RECORDS_KEY, loadGoal, loadRecords, saveGoal, saveRecords } from './storage';
+import {
+  BROKEN_SUFFIX,
+  GOAL_KEY,
+  RECORDS_KEY,
+  loadGoal,
+  loadRecords,
+  saveGoal,
+  saveRecords,
+} from './storage';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -49,6 +57,20 @@ describe('storage', () => {
     expect(result.problem).toBe(true);
     expect(result.data.map((r) => r.id)).toEqual(['ok', 'null-optional']);
     expect(result.data[1]).not.toHaveProperty('bodyFat');
+  });
+
+  it('読み込めなかった元データは別キーに退避し、後から上書きしない', () => {
+    localStorage.setItem(RECORDS_KEY, '{broken');
+    loadRecords();
+    expect(localStorage.getItem(RECORDS_KEY + BROKEN_SUFFIX)).toBe('{broken');
+    localStorage.setItem(RECORDS_KEY, '{another');
+    loadRecords();
+    expect(localStorage.getItem(RECORDS_KEY + BROKEN_SUFFIX)).toBe('{broken');
+
+    // 正常なデータでは退避しない
+    localStorage.setItem(GOAL_KEY, JSON.stringify({ startDate: '2026-09-01', targetDate: '2026-12-01', targetWeight: 65 }));
+    loadGoal();
+    expect(localStorage.getItem(GOAL_KEY + BROKEN_SUFFIX)).toBeNull();
   });
 
   it('localStorage が使えなくても例外を投げない', () => {
