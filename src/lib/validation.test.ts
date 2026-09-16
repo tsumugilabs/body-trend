@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyRecord } from '../types';
-import { parseDecimal, validateGoal, validateRecord, type GoalInput, type RecordInput } from './validation';
+import {
+  parseDecimal,
+  validateExercise,
+  validateGoal,
+  validateRecord,
+  validateTraining,
+  type GoalInput,
+  type RecordInput,
+  type TrainingInput,
+} from './validation';
+import type { Exercise } from '../types';
 
 const today = '2026-09-14';
 const input = (over: Partial<RecordInput> = {}): RecordInput => ({
@@ -94,5 +104,100 @@ describe('validateGoal', () => {
     const r = validateGoal({ ...goal, startDate: '2026-01-01', targetDate: '2026-06-01' }, { today });
     expect(r.values).toBeDefined();
     expect(r.warnings).toHaveLength(1);
+  });
+});
+
+describe('validateTraining', () => {
+  const exercises: Exercise[] = [
+    { id: 'e1', name: 'ベンチプレス', kind: 'strength' },
+    { id: 'e2', name: 'ランニング', kind: 'cardio' },
+  ];
+  const input = (over: Partial<TrainingInput> = {}): TrainingInput => ({
+    date: today,
+    exerciseId: 'e1',
+    weight: '',
+    reps: '',
+    sets: '',
+    minutes: '',
+    distance: '',
+    memo: '',
+    ...over,
+  });
+
+  it('種類に応じた項目を取り込み、種目名と種類も一緒に保存する', () => {
+    const r = validateTraining(input({ weight: '60', reps: '10', sets: '3', memo: ' 調子よし ' }), {
+      today,
+      exercises,
+    });
+    expect(r.errors).toEqual({});
+    expect(r.values).toEqual({
+      date: today,
+      exerciseId: 'e1',
+      exerciseName: 'ベンチプレス',
+      kind: 'strength',
+      weight: 60,
+      reps: 10,
+      sets: 3,
+      memo: '調子よし',
+    });
+  });
+
+  it('種類で使わない項目は取り込まない', () => {
+    const r = validateTraining(input({ exerciseId: 'e2', minutes: '30', distance: '5', weight: '60' }), {
+      today,
+      exercises,
+    });
+    expect(r.values).toEqual({
+      date: today,
+      exerciseId: 'e2',
+      exerciseName: 'ランニング',
+      kind: 'cardio',
+      minutes: 30,
+      distance: 5,
+    });
+  });
+
+  it('種目が未選択ならエラー', () => {
+    expect(validateTraining(input({ exerciseId: '' }), { today, exercises }).errors.exerciseId).toBe(
+      '種目を選んでください',
+    );
+  });
+
+  it('内容が空ならエラー', () => {
+    expect(validateTraining(input(), { today, exercises }).errors.weight).toBe('内容を1つ以上入力してください');
+  });
+
+  it('回数とセット数は整数、範囲外はエラー、珍しい値は確認', () => {
+    expect(validateTraining(input({ reps: '10.5' }), { today, exercises }).errors.reps).toMatch(/整数/);
+    expect(validateTraining(input({ weight: '600' }), { today, exercises }).errors.weight).toMatch(/範囲/);
+    const soft = validateTraining(input({ weight: '300' }), { today, exercises });
+    expect(soft.values).toBeDefined();
+    expect(soft.warnings[0]).toMatch(/一般的な範囲/);
+  });
+
+  it('未来の日付は記録できない', () => {
+    expect(
+      validateTraining(input({ date: '2026-09-15', weight: '60' }), { today, exercises }).errors.date,
+    ).toBeDefined();
+  });
+});
+
+describe('validateExercise', () => {
+  const exercises: Exercise[] = [{ id: 'e1', name: 'ベンチプレス', kind: 'strength' }];
+
+  it('名前は必須で、同じ名前は登録できない', () => {
+    expect(validateExercise({ name: '  ', kind: 'strength' }, { exercises }).error).toMatch(/種目名/);
+    expect(validateExercise({ name: 'ベンチプレス', kind: 'cardio' }, { exercises }).error).toMatch(/同じ名前/);
+    expect(validateExercise({ name: 'ベンチプレス', kind: 'cardio' }, { exercises, editingId: 'e1' }).values).toEqual({
+      name: 'ベンチプレス',
+      kind: 'cardio',
+    });
+  });
+
+  it('前後の空白は落とす', () => {
+    expect(validateExercise({ name: ' 懸垂 ', kind: 'strength' }, { exercises }).values).toEqual({
+      name: '懸垂',
+      kind: 'strength',
+    });
   });
 });

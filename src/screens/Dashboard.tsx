@@ -1,5 +1,7 @@
-import type { BodyRecord, GoalSettings, MetricKey } from '../types';
+import type { BodyRecord, GoalSettings, MetricKey, TrainingRecord } from '../types';
 import { formatLong, formatShort } from '../lib/date';
+import { summarizeTraining } from '../lib/training';
+import { trainingsOn } from '../lib/trainings';
 import { METRICS, changeTone, formatNumber, formatSigned } from '../lib/metrics';
 import { metricChange, summarize, type LatestValue } from '../lib/stats';
 import { TrendChart } from './TrendChart';
@@ -9,6 +11,8 @@ type Props = {
   goal: GoalSettings | null;
   today: string;
   onRecord: () => void;
+  trainings: TrainingRecord[];
+  onTraining: () => void;
   /** バックアップを促すか */
   backupDue?: boolean;
   lastBackupAt?: string;
@@ -32,6 +36,8 @@ export function Dashboard({
   goal,
   today,
   onRecord,
+  trainings,
+  onTraining,
   backupDue,
   lastBackupAt,
   onOpenBackup,
@@ -92,6 +98,8 @@ export function Dashboard({
         <MiniStat metric="waist" latest={s.latestWaist} records={records} goal={goal} />
       </div>
 
+      <TodayTraining trainings={trainingsOn(trainings, today)} onTraining={onTraining} />
+
       <TrendChart records={records} goal={goal} today={today} onRecord={onRecord} />
 
       {backupDue && onOpenBackup && (
@@ -108,6 +116,43 @@ export function Dashboard({
         </section>
       )}
     </div>
+  );
+}
+
+/** 今日のトレーニング。まだなければ記録への入り口を出す。 */
+function TodayTraining({
+  trainings,
+  onTraining,
+}: {
+  trainings: TrainingRecord[];
+  onTraining: () => void;
+}) {
+  const shown = trainings.slice(0, 3);
+  return (
+    <section className="card today-training" aria-label="今日のトレーニング">
+      <div className="hero-top">
+        <span className="stat-label">今日のトレーニング</span>
+        {trainings.length > 0 && <span className="stat-date">{trainings.length}種目</span>}
+      </div>
+      {trainings.length === 0 ? (
+        <p className="muted">まだ記録がありません</p>
+      ) : (
+        <ul className="today-training-list">
+          {shown.map((training) => (
+            <li key={training.id}>
+              <span className="exercise-name">{training.exerciseName}</span>
+              <span className="training-summary">{summarizeTraining(training)}</span>
+            </li>
+          ))}
+          {trainings.length > shown.length && (
+            <li className="muted">ほか {trainings.length - shown.length}件</li>
+          )}
+        </ul>
+      )}
+      <button type="button" className="btn btn-secondary btn-small" onClick={onTraining}>
+        {trainings.length === 0 ? 'トレーニングを記録' : 'トレーニングを見る'}
+      </button>
+    </section>
   );
 }
 

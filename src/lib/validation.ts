@@ -1,7 +1,15 @@
-import type { BodyRecord, GoalSettings, MetricKey } from '../types';
+import type { BodyRecord, Exercise, ExerciseKind, GoalSettings, MetricKey, TrainingRecord } from '../types';
 import { isValidDateString } from './date';
 import { previousRecord } from './records';
 import { METRICS, METRIC_ORDER, type MetricDef } from './metrics';
+import {
+  EXERCISE_NAME_MAX,
+  KINDS,
+  MEMO_MAX,
+  TRAINING_FIELDS,
+  type TrainingFieldKey,
+} from './training';
+import { findExerciseByName } from './trainings';
 
 /**
  * hard: この範囲外は明らかな入力ミスとしてエラー
@@ -197,4 +205,102 @@ export function validateGoal(input: GoalInput, options: { today?: string } = {})
   if (parsed.targetSkeletalMuscle !== undefined) values.targetSkeletalMuscle = parsed.targetSkeletalMuscle;
   if (parsed.targetWaist !== undefined) values.targetWaist = parsed.targetWaist;
   return { errors, warnings, values };
+}
+
+export type TrainingInput = {
+  date: string;
+  exerciseId: string;
+  memo: string;
+} & Record<TrainingFieldKey, string>;
+
+export type TrainingErrors = Partial<Record<keyof TrainingInput, string>>;
+
+export type TrainingValidation = {
+  errors: TrainingErrors;
+  warnings: string[];
+  values?: Omit<TrainingRecord, 'id'>;
+};
+
+/** 種類ごとに使う項目だけを検証する。項目はすべて任意だが、1つ以上は入力が必要。 */
+export function validateTraining(
+  input: TrainingInput,
+  options: { today: string; exercises: Exercise[] },
+): TrainingValidation {
+  const errors: TrainingErrors = {};
+  const warnings: string[] = [];
+
+  if (!input.date) errors.date = '日付を入力してください';
+  else if (!isValidDateString(input.date)) errors.date = '日付の形式が正しくありません';
+  else if (input.date > options.today) errors.date = '未来の日付は記録できません';
+
+  const exercise = options.exercises.find((e) => e.id === input.exerciseId);
+  if (!exercise) errors.exerciseId = '種目を選んでください';
+
+  const memo = input.memo.trim();
+  if (memo.length > MEMO_MAX) errors.memo = `メモは${MEMO_MAX}文字までです`;
+
+  const parsed: Partial<Record<TrainingFieldKey, number>> = {};
+  const fields = exercise ? KINDS[exercise.kind].fields : [];
+  for (const key of fields) {
+    const field = TRAINING_FIELDS[key];
+    const result = parseDecimal(input[key]);
+    if (!result.ok) {
+      errors[key] = result.error;
+      continue;
+    }
+    if (result.value === undefined) continue;
+    if (field.integer && !Number.isInteger(result.value)) {
+      errors[key] = `${field.label}は整数で入力してください`;
+      continue;
+    }
+    if (result.value < field.hardMin || result.value > field.hardMax) {
+      errors[key] = `${field.label}は ${field.hardMin}〜${field.hardMax}${field.unit} の範囲で入力してください`;
+      continue;
+    }
+    if (result.value > field.softMax) {
+      warnings.push(`${field.label} ${formatTrainingInput(key, result.value)} は一般的な範囲から外れています`);
+    }
+    parsed[key] = result.value;
+  }
+
+  if (exercise && fields.length > 0 && fields.every((key) => parsed[key] === undefined) && !errors[fields[0]]) {
+    errors[fields[0]] = '内容を1つ以上入力してください';
+  }
+
+  if (Object.keys(errors).length > 0 || !exercise) return { errors, warnings: [] };
+
+  const values: Omit<TrainingRecord, 'id'> = {
+    date: input.date,
+    exerciseId: exercise.id,
+    exerciseName: exercise.name,
+    kind: exercise.kind,
+  };
+  for (const key of fields) {
+    const value = parsed[key];
+    if (value !== undefined) values[key] = value;
+  }
+  if (memo) values.memo = memo;
+
+  return { errors, warnings, values };
+}
+
+function formatTrainingInput(key: TrainingFieldKey, value: number): string {
+  const { integer, unit } = TRAINING_FIELDS[key];
+  return `${integer ? String(value) : value.toFixed(1)}${unit}`;
+}
+
+export type ExerciseInput = { name: string; kind: ExerciseKind };
+
+export type ExerciseValidation = { error?: string; values?: Omit<Exercise, 'id'> };
+
+export function validateExercise(
+  input: ExerciseInput,
+  options: { exercises: Exercise[]; editingId?: string },
+): ExerciseValidation {
+  const name = input.name.trim();
+  if (!name) return { error: '種目名を入力してください' };
+  if (name.length > EXERCISE_NAME_MAX) return { error: `種目名は${EXERCISE_NAME_MAX}文字までです` };
+  const others = options.exercises.filter((e) => e.id !== options.editingId);
+  if (findExerciseByName(others, name)) return { error: '同じ名前の種目がすでにあります' };
+  return { values: { name, kind: input.kind } };
 }

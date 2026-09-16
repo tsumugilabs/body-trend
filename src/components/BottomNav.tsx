@@ -1,9 +1,10 @@
 import type { TabKey } from '../types';
-import { HomeIcon, ListIcon, PlusIcon, SettingsIcon } from './Icons';
+import { DumbbellIcon, HomeIcon, ListIcon, PlusIcon, SettingsIcon } from './Icons';
 
 const ITEMS: { key: TabKey; label: string; Icon: () => React.JSX.Element }[] = [
   { key: 'home', label: 'ホーム', Icon: HomeIcon },
   { key: 'record', label: '記録する', Icon: PlusIcon },
+  { key: 'training', label: 'トレーニング', Icon: DumbbellIcon },
   { key: 'history', label: '履歴', Icon: ListIcon },
   { key: 'settings', label: '設定', Icon: SettingsIcon },
 ];

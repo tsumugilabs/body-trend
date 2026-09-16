@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import type { BodyRecord, GoalSettings } from '../types';
+import type { BodyRecord, Exercise, GoalSettings, TrainingRecord } from '../types';
 import {
   backupFileName,
   createBackup,
   parseBackup,
   recordsLostByRestore,
+  trainingsLostByRestore,
   type BackupData,
 } from '../lib/backup';
 import { formatDateTime, formatShort } from '../lib/date';
@@ -20,6 +21,7 @@ import type { Notify } from '../components/Toast';
 type RestoreProps = {
   records: BodyRecord[];
   goal: GoalSettings | null;
+  trainings: TrainingRecord[];
   notify: Notify;
   onRestore: (data: BackupData) => void;
   label?: string;
@@ -30,6 +32,7 @@ type RestoreProps = {
 export function RestoreButton({
   records,
   goal,
+  trainings,
   notify,
   onRestore,
   label = 'バックアップから復元',
@@ -57,9 +60,10 @@ export function RestoreButton({
     }
 
     const data = result.data;
-    const hasCurrent = records.length > 0;
-    // 件数ではなく、置き換えで実際に消える記録（バックアップに同じ日付がないもの）で判断する
+    const hasCurrent = records.length > 0 || trainings.length > 0;
+    // 件数ではなく、置き換えで実際に消えるもの（バックアップに同じ日付・id がないもの）で判断する
     const lost = recordsLostByRestore(records, data.records);
+    const lostTrainings = trainingsLostByRestore(trainings, data.trainings);
     const lostRange =
       lost.length === 0
         ? ''
@@ -78,7 +82,9 @@ export function RestoreButton({
             {hasCurrent && (
               <>
                 <dt>現在の記録（置き換えられます）</dt>
-                <dd>記録 {records.length}件</dd>
+                <dd>
+                  記録 {records.length}件 ・ トレーニング {trainings.length}件
+                </dd>
               </>
             )}
             <dt>目標</dt>
@@ -89,12 +95,20 @@ export function RestoreButton({
               現在の記録のうち {lost.length}件（{lostRange}）はバックアップに含まれないため消えます。
             </p>
           )}
+          {lostTrainings.length > 0 && (
+            <p className="dialog-warning">
+              現在のトレーニング記録のうち {lostTrainings.length}件 はバックアップに含まれないため消えます。
+            </p>
+          )}
           {data.skipped > 0 && <p>読み込めない記録 {data.skipped}件 は除外されます。</p>}
+          {data.skippedTrainings > 0 && (
+            <p>読み込めないトレーニング関連のデータ {data.skippedTrainings}件 は除外されます。</p>
+          )}
         </>
       ),
       confirmLabel: '復元する',
       danger: hasCurrent,
-      requireText: lost.length > 0 ? '復元' : undefined,
+      requireText: lost.length > 0 || lostTrainings.length > 0 ? '復元' : undefined,
     });
     if (ok) onRestore(data);
   };
@@ -120,6 +134,8 @@ export function RestoreButton({
 type Props = {
   records: BodyRecord[];
   goal: GoalSettings | null;
+  trainings: TrainingRecord[];
+  exercises: Exercise[];
   today: string;
   lastBackupAt?: string;
   notify: Notify;
@@ -134,7 +150,17 @@ const INSTALL_HINT: Record<ProtectionStatus['platform'], string> = {
   other: 'ブラウザのメニューからアプリとしてインストールすると、記録が消えにくくなります。',
 };
 
-export function DataProtection({ records, goal, today, lastBackupAt, notify, onBackedUp, onRestore }: Props) {
+export function DataProtection({
+  records,
+  goal,
+  trainings,
+  exercises,
+  today,
+  lastBackupAt,
+  notify,
+  onBackedUp,
+  onRestore,
+}: Props) {
   const [status, setStatus] = useState<ProtectionStatus | null>(null);
 
   useEffect(() => {
@@ -148,11 +174,14 @@ export function DataProtection({ records, goal, today, lastBackupAt, notify, onB
   }, []);
 
   const handleBackup = async () => {
-    if (records.length === 0 && !goal) {
+    if (records.length === 0 && trainings.length === 0 && !goal) {
       notify('保存するデータがありません');
       return;
     }
-    const outcome = await saveTextFile(createBackup(records, goal), backupFileName(today));
+    const outcome = await saveTextFile(
+      createBackup({ records, goal, trainings, exercises }),
+      backupFileName(today),
+    );
     if (outcome === 'cancelled') return;
     onBackedUp(new Date().toISOString());
     notify(
@@ -204,12 +233,18 @@ export function DataProtection({ records, goal, today, lastBackupAt, notify, onB
       )}
 
       <p className="muted">
-        記録はこの端末の中にだけ保存されます（{records.length}件）。機種変更やブラウザのデータ消去に備えて、ときどきバックアップファイルを保存してください。
+        記録はこの端末の中にだけ保存されます（記録 {records.length}件・トレーニング {trainings.length}件）。機種変更やブラウザのデータ消去に備えて、ときどきバックアップファイルを保存してください。
       </p>
       <button type="button" className="btn btn-primary btn-block" onClick={handleBackup}>
         バックアップを保存
       </button>
-      <RestoreButton records={records} goal={goal} notify={notify} onRestore={onRestore} />
+      <RestoreButton
+        records={records}
+        goal={goal}
+        trainings={trainings}
+        notify={notify}
+        onRestore={onRestore}
+      />
     </div>
   );
 }
