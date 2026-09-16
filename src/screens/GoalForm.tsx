@@ -22,6 +22,7 @@ export function GoalForm({ initial, today, submitLabel, onSubmit }: Props) {
     targetWeight: toInput(initial?.targetWeight),
     targetBodyFat: toInput(initial?.targetBodyFat),
     targetSkeletalMuscle: toInput(initial?.targetSkeletalMuscle),
+    targetWaist: toInput(initial?.targetWaist),
   }));
   const [errors, setErrors] = useState<GoalErrors>({});
 
@@ -105,6 +106,15 @@ export function GoalForm({ initial, today, submitLabel, onSubmit }: Props) {
         onChange={update('targetSkeletalMuscle')}
         error={errors.targetSkeletalMuscle}
         placeholder="例 32.0"
+      />
+      <NumberField
+        id="goal-targetWaist"
+        label="目標腹囲"
+        unit="cm"
+        value={input.targetWaist}
+        onChange={update('targetWaist')}
+        error={errors.targetWaist}
+        placeholder="例 80.0"
       />
       <button type="submit" className="btn btn-primary btn-block btn-large">
         {submitLabel}

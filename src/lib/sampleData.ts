@@ -23,6 +23,7 @@ export function createSampleData(today: string): { records: BodyRecord[]; goal: 
     const weight = 78.4 - 5.2 * progress + rand() * 0.8;
     const bodyFat = 27.8 - 3.6 * progress + rand() * 0.6;
     const muscle = 29.6 + 1.4 * progress + rand() * 0.4;
+    const waist = 88.5 - 6.0 * progress + rand() * 0.8;
     const record: BodyRecord = {
       id: `sample-${i}`,
       date: addDays(startDate, i),
@@ -33,6 +34,8 @@ export function createSampleData(today: string): { records: BodyRecord[]; goal: 
       record.bodyFat = Math.round(bodyFat * 10) / 10;
       record.skeletalMuscle = Math.round(muscle * 10) / 10;
     }
+    // 腹囲は週に1回ほど測る
+    if (i % 7 === 0) record.waist = Math.round(waist * 10) / 10;
     records.push(record);
   }
   return {
@@ -43,6 +46,7 @@ export function createSampleData(today: string): { records: BodyRecord[]; goal: 
       targetWeight: 70,
       targetBodyFat: 22,
       targetSkeletalMuscle: 32,
+      targetWaist: 82,
     },
   };
 }

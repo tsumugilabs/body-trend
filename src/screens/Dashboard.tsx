@@ -89,6 +89,7 @@ export function Dashboard({
       <div className="stat-grid">
         <MiniStat metric="bodyFat" latest={s.latestBodyFat} records={records} goal={goal} />
         <MiniStat metric="skeletalMuscle" latest={s.latestSkeletalMuscle} records={records} goal={goal} />
+        <MiniStat metric="waist" latest={s.latestWaist} records={records} goal={goal} />
       </div>
 
       <TrendChart records={records} goal={goal} today={today} onRecord={onRecord} />

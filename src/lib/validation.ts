@@ -1,7 +1,7 @@
 import type { BodyRecord, GoalSettings, MetricKey } from '../types';
 import { isValidDateString } from './date';
 import { previousRecord } from './records';
-import { METRICS } from './metrics';
+import { METRICS, METRIC_ORDER, type MetricDef } from './metrics';
 
 /**
  * hard: この範囲外は明らかな入力ミスとしてエラー
@@ -13,6 +13,7 @@ export const RANGES: Record<MetricKey, Range> = {
   weight: { hardMin: 20, hardMax: 300, softMin: 30, softMax: 200 },
   bodyFat: { hardMin: 1, hardMax: 75, softMin: 3, softMax: 60 },
   skeletalMuscle: { hardMin: 5, hardMax: 70, softMin: 15, softMax: 60 },
+  waist: { hardMin: 30, hardMax: 200, softMin: 50, softMax: 150 },
 };
 
 /** 前回の記録からこれ以上変化していたら確認する */
@@ -20,6 +21,7 @@ export const SUDDEN_CHANGE: Record<MetricKey, number> = {
   weight: 5,
   bodyFat: 8,
   skeletalMuscle: 8,
+  waist: 10,
 };
 
 export type ParseResult =
@@ -60,6 +62,7 @@ export type RecordInput = {
   weight: string;
   bodyFat: string;
   skeletalMuscle: string;
+  waist: string;
 };
 
 export type FieldErrors = Partial<Record<keyof RecordInput, string>>;
@@ -83,7 +86,7 @@ export function validateRecord(
   else if (input.date > options.today) errors.date = '未来の日付は記録できません';
 
   const parsed: Partial<Record<MetricKey, number>> = {};
-  (['weight', 'bodyFat', 'skeletalMuscle'] as const).forEach((key) => {
+  METRIC_ORDER.forEach((key) => {
     const result = parseDecimal(input[key]);
     if (!result.ok) {
       errors[key] = result.error;
@@ -107,7 +110,7 @@ export function validateRecord(
   const others = options.records.filter((r) => r.id !== options.editingId);
   const prev = previousRecord(others, input.date);
   if (prev) {
-    (['weight', 'bodyFat', 'skeletalMuscle'] as const).forEach((key) => {
+    METRIC_ORDER.forEach((key) => {
       const now = parsed[key];
       const before = prev[key];
       if (now === undefined || before === undefined) return;
@@ -124,6 +127,7 @@ export function validateRecord(
   const values: Omit<BodyRecord, 'id'> = { date: input.date, weight: parsed.weight as number };
   if (parsed.bodyFat !== undefined) values.bodyFat = parsed.bodyFat;
   if (parsed.skeletalMuscle !== undefined) values.skeletalMuscle = parsed.skeletalMuscle;
+  if (parsed.waist !== undefined) values.waist = parsed.waist;
 
   return { errors, warnings, values };
 }
@@ -134,6 +138,7 @@ export type GoalInput = {
   targetWeight: string;
   targetBodyFat: string;
   targetSkeletalMuscle: string;
+  targetWaist: string;
 };
 
 export type GoalErrors = Partial<Record<keyof GoalInput, string>>;
@@ -157,12 +162,8 @@ export function validateGoal(input: GoalInput, options: { today?: string } = {})
     errors.targetDate = '目標日は開始日より後の日付にしてください';
   }
 
-  const fields = [
-    ['targetWeight', 'weight'],
-    ['targetBodyFat', 'bodyFat'],
-    ['targetSkeletalMuscle', 'skeletalMuscle'],
-  ] as const;
-  const parsed: Partial<Record<(typeof fields)[number][0], number>> = {};
+  const fields = METRIC_ORDER.map((metric) => [METRICS[metric].goalKey, metric] as const);
+  const parsed: Partial<Record<MetricDef['goalKey'], number>> = {};
   for (const [field, metric] of fields) {
     const result = parseDecimal(input[field]);
     if (!result.ok) {
@@ -194,5 +195,6 @@ export function validateGoal(input: GoalInput, options: { today?: string } = {})
   };
   if (parsed.targetBodyFat !== undefined) values.targetBodyFat = parsed.targetBodyFat;
   if (parsed.targetSkeletalMuscle !== undefined) values.targetSkeletalMuscle = parsed.targetSkeletalMuscle;
+  if (parsed.targetWaist !== undefined) values.targetWaist = parsed.targetWaist;
   return { errors, warnings, values };
 }

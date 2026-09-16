@@ -20,7 +20,8 @@ export function isBodyRecord(value: unknown): value is BodyRecord {
     isFiniteNumber(r.weight) &&
     r.weight > 0 &&
     isOptionalNumber(r.bodyFat) &&
-    isOptionalNumber(r.skeletalMuscle)
+    isOptionalNumber(r.skeletalMuscle) &&
+    isOptionalNumber(r.waist)
   );
 }
 
@@ -34,7 +35,8 @@ export function isGoalSettings(value: unknown): value is GoalSettings {
     isFiniteNumber(g.targetWeight) &&
     g.targetWeight > 0 &&
     isOptionalNumber(g.targetBodyFat) &&
-    isOptionalNumber(g.targetSkeletalMuscle)
+    isOptionalNumber(g.targetSkeletalMuscle) &&
+    isOptionalNumber(g.targetWaist)
   );
 }
 
@@ -42,6 +44,7 @@ export function normalizeRecord(r: BodyRecord): BodyRecord {
   const out: BodyRecord = { id: r.id, date: r.date, weight: r.weight };
   if (isFiniteNumber(r.bodyFat)) out.bodyFat = r.bodyFat;
   if (isFiniteNumber(r.skeletalMuscle)) out.skeletalMuscle = r.skeletalMuscle;
+  if (isFiniteNumber(r.waist)) out.waist = r.waist;
   return out;
 }
 
@@ -53,7 +56,21 @@ export function normalizeGoal(g: GoalSettings): GoalSettings {
   };
   if (isFiniteNumber(g.targetBodyFat)) out.targetBodyFat = g.targetBodyFat;
   if (isFiniteNumber(g.targetSkeletalMuscle)) out.targetSkeletalMuscle = g.targetSkeletalMuscle;
+  if (isFiniteNumber(g.targetWaist)) out.targetWaist = g.targetWaist;
   return out;
+}
+
+/** 目標の内容が同じか */
+export function sameGoal(a: GoalSettings | null, b: GoalSettings | null): boolean {
+  if (a === null || b === null) return a === b;
+  return (
+    a.startDate === b.startDate &&
+    a.targetDate === b.targetDate &&
+    a.targetWeight === b.targetWeight &&
+    a.targetBodyFat === b.targetBodyFat &&
+    a.targetSkeletalMuscle === b.targetSkeletalMuscle &&
+    a.targetWaist === b.targetWaist
+  );
 }
 
 /**

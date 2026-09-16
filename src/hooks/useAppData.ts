@@ -7,11 +7,19 @@ import {
   loadGoal,
   loadMeta,
   loadRecords,
+  sameGoal,
   saveGoal,
   saveMeta,
   saveRecords,
 } from '../lib/storage';
-import { removeRecord, upsertRecord } from '../lib/records';
+import { removeRecord, undoReplaceRecords, upsertRecord } from '../lib/records';
+
+/** 全体を置き換える操作の前後を覚えておくための控え */
+export type DataSnapshot = {
+  records: BodyRecord[];
+  goal: GoalSettings | null;
+  lastBackupAt?: string;
+};
 
 /**
  * 記録と目標の状態を持ち、変更のたびに localStorage へ書き込む。
@@ -68,20 +76,69 @@ export function useAppData() {
     return saveGoal(next);
   }, []);
 
-  const replaceAll = useCallback(
-    (nextRecords: BodyRecord[], nextGoal: GoalSettings | null): boolean => {
-      const a = commitRecords(nextRecords);
-      setGoal(nextGoal);
-      const b = saveGoal(nextGoal);
-      return a && b;
-    },
-    [commitRecords],
+  const writeBackupMark = useCallback((iso: string | undefined): boolean => {
+    setLastBackupAt(iso);
+    const meta = { ...loadMeta() };
+    if (iso === undefined) delete meta.lastBackupAt;
+    else meta.lastBackupAt = iso;
+    return saveMeta(meta);
+  }, []);
+
+  const snapshot = useCallback(
+    (): DataSnapshot => ({ records, goal, lastBackupAt }),
+    [records, goal, lastBackupAt],
   );
 
-  const markBackedUp = useCallback((iso: string): boolean => {
-    setLastBackupAt(iso);
-    return saveMeta({ ...loadMeta(), lastBackupAt: iso });
-  }, []);
+  /**
+   * 記録と目標をまとめて置き換える（復元・全削除・サンプル読み込み）。
+   * clearBackupMark: 最終バックアップ日時も消す（残っていると、別のデータのバックアップを最新として扱ってしまうため）
+   */
+  const replaceAll = useCallback(
+    (
+      nextRecords: BodyRecord[],
+      nextGoal: GoalSettings | null,
+      options: { clearBackupMark?: boolean } = {},
+    ): boolean => {
+      const okRecords = commitRecords(nextRecords);
+      setGoal(nextGoal);
+      const okGoal = saveGoal(nextGoal);
+      const okMark = options.clearBackupMark ? writeBackupMark(undefined) : true;
+      return okRecords && okGoal && okMark;
+    },
+    [commitRecords, writeBackupMark],
+  );
+
+  /**
+   * replaceAll を取り消す。取り消せるあいだに別の画面が加えた変更は巻き戻さずに残す。
+   * @returns kept 残した（この操作のあとに加わった）記録の件数
+   */
+  const undoReplaceAll = useCallback(
+    (before: DataSnapshot, applied: DataSnapshot): { ok: boolean; kept: number } => {
+      const { records: merged, kept } = undoReplaceRecords(
+        before.records,
+        applied.records,
+        latestRecords(),
+      );
+      const okRecords = commitRecords(merged);
+
+      const currentGoal = loadGoal().data;
+      const nextGoal = sameGoal(currentGoal, applied.goal) ? before.goal : currentGoal;
+      setGoal(nextGoal);
+      const okGoal = saveGoal(nextGoal);
+
+      // 取り消せるあいだにバックアップを保存していたら、その日時を残す
+      const currentMark = loadMeta().lastBackupAt;
+      const okMark = currentMark === applied.lastBackupAt ? writeBackupMark(before.lastBackupAt) : true;
+
+      return { ok: okRecords && okGoal && okMark, kept };
+    },
+    [commitRecords, latestRecords, writeBackupMark],
+  );
+
+  const markBackedUp = useCallback(
+    (iso: string): boolean => writeBackupMark(iso),
+    [writeBackupMark],
+  );
 
   return {
     records,
@@ -91,7 +148,9 @@ export function useAppData() {
     saveRecord,
     deleteRecord,
     updateGoal,
+    snapshot,
     replaceAll,
+    undoReplaceAll,
     markBackedUp,
   };
 }

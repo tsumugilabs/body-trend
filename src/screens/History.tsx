@@ -26,7 +26,8 @@ export function History({ records, today, onEdit, onDelete, onRecord }: Props) {
             <dt>削除する記録</dt>
             <dd>
               {formatShort(record.date)} ・ 体重 {formatNumber(record.weight)}kg ・ 体脂肪率{' '}
-              {formatNumber(record.bodyFat)}% ・ 骨格筋率 {formatNumber(record.skeletalMuscle)}%
+              {formatNumber(record.bodyFat)}% ・ 骨格筋率 {formatNumber(record.skeletalMuscle)}% ・ 腹囲{' '}
+              {formatNumber(record.waist)}cm
             </dd>
           </dl>
           <p>削除した直後に表示される「元に戻す」で取り消せます。</p>
@@ -68,6 +69,7 @@ export function History({ records, today, onEdit, onDelete, onRecord }: Props) {
                   <p className="history-sub">
                     <span>体脂肪 {formatNumber(r.bodyFat)}{r.bodyFat !== undefined && '%'}</span>
                     <span>骨格筋 {formatNumber(r.skeletalMuscle)}{r.skeletalMuscle !== undefined && '%'}</span>
+                    <span>腹囲 {formatNumber(r.waist)}{r.waist !== undefined && 'cm'}</span>
                   </p>
                 </div>
                 <div className="history-actions">

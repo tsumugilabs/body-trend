@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BodyRecord, GoalSettings } from '../types';
-import { backupFileName, createBackup, isBackupDue, parseBackup } from './backup';
+import { backupFileName, createBackup, isBackupDue, parseBackup, recordsLostByRestore } from './backup';
 
 const records: BodyRecord[] = [
   { id: 'a', date: '2026-09-01', weight: 72.1, bodyFat: 26 },
@@ -40,6 +40,17 @@ describe('backup', () => {
     expect(result.data.records).toHaveLength(2);
     expect(result.data.skipped).toBe(2);
     expect(result.data.goal).toBeNull();
+  });
+
+  it('復元で消える記録を日付で見つける（件数では判断しない）', () => {
+    const backup: BodyRecord[] = [
+      { id: 'c', date: '2026-09-03', weight: 71 },
+      { id: 'd', date: '2026-09-04', weight: 70.9 },
+    ];
+    // 件数は同じでも、現在の記録の日付がバックアップにないものは消える
+    expect(recordsLostByRestore(records, backup)).toEqual(records);
+    expect(recordsLostByRestore(records, [...records, ...backup])).toEqual([]);
+    expect(recordsLostByRestore(records, [records[0]])).toEqual([records[1]]);
   });
 
   it('記録が一定数あり、30日以上バックアップしていなければ促す', () => {

@@ -63,6 +63,15 @@ export function parseBackup(text: string): ParseBackupResult {
   return { ok: true, data: { records, goal, exportedAt, skipped } };
 }
 
+/**
+ * 復元で置き換えたときに消える現在の記録。
+ * 記録は日付ごとに1件なので、復元後の記録に同じ日付がないものが消える。
+ */
+export function recordsLostByRestore(current: BodyRecord[], next: BodyRecord[]): BodyRecord[] {
+  const dates = new Set(next.map((r) => r.date));
+  return current.filter((r) => !dates.has(r.date));
+}
+
 export function isBackupDue(recordCount: number, lastBackupAt: string | undefined, now: number): boolean {
   if (recordCount < BACKUP_REMIND_MIN_RECORDS) return false;
   if (!lastBackupAt) return true;

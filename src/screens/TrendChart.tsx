@@ -25,6 +25,7 @@ export const METRIC_COLORS: Record<MetricKey, string> = {
   weight: '#0f8f86',
   bodyFat: '#2a9d8f',
   skeletalMuscle: '#2f6fd6',
+  waist: '#7c5cbf',
 };
 
 type Props = {
@@ -71,7 +72,7 @@ export function TrendChart({ records, goal, today, onRecord }: Props) {
 
   return (
     <section className="card chart-card" aria-label="推移グラフ">
-      <div className="segmented" role="group" aria-label="表示する項目">
+      <div className="segmented segmented-metrics" role="group" aria-label="表示する項目">
         {METRIC_ORDER.map((key) => (
           <button
             key={key}
