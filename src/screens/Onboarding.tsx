@@ -1,4 +1,4 @@
-import type { BodyRecord, GoalSettings, TrainingRecord } from '../types';
+import type { BodyRecord, Exercise, GoalSettings, TrainingRecord } from '../types';
 import type { BackupData } from '../lib/backup';
 import type { Notify } from '../components/Toast';
 import { GoalForm } from './GoalForm';
@@ -8,13 +8,23 @@ type Props = {
   today: string;
   records: BodyRecord[];
   trainings: TrainingRecord[];
+  exercises: Exercise[];
   notify: Notify;
   onSubmit: (goal: GoalSettings) => void;
   onRestore: (data: BackupData) => void;
   onLoadSample?: () => void;
 };
 
-export function Onboarding({ today, records, trainings, notify, onSubmit, onRestore, onLoadSample }: Props) {
+export function Onboarding({
+  today,
+  records,
+  trainings,
+  exercises,
+  notify,
+  onSubmit,
+  onRestore,
+  onLoadSample,
+}: Props) {
   return (
     <div className="screen onboarding">
       <header className="onboarding-header">
@@ -29,6 +39,7 @@ export function Onboarding({ today, records, trainings, notify, onSubmit, onRest
           records={records}
           goal={null}
           trainings={trainings}
+          exercises={exercises}
           notify={notify}
           onRestore={onRestore}
           label="バックアップから復元する"

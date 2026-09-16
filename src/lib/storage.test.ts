@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { TrainingRecord } from '../types';
 import {
   BROKEN_SUFFIX,
   GOAL_KEY,
   RECORDS_KEY,
+  TRAININGS_KEY,
   loadGoal,
   loadRecords,
+  loadTrainings,
   saveGoal,
   saveRecords,
 } from './storage';
@@ -82,5 +85,33 @@ describe('storage', () => {
     });
     expect(loadRecords()).toEqual({ data: [], problem: true });
     expect(saveRecords([])).toBe(false);
+  });
+
+  it('中身のないトレーニング記録は読み飛ばす', () => {
+    const valid: TrainingRecord = {
+      id: 'a',
+      date: '2026-09-02',
+      exerciseId: 'e1',
+      exerciseName: 'ベンチプレス',
+      kind: 'strength',
+      weight: 60,
+      reps: 10,
+      sets: 3,
+    };
+    localStorage.setItem(
+      TRAININGS_KEY,
+      JSON.stringify([
+        valid,
+        // 値がまったくない
+        { id: 'b', date: '2026-09-02', exerciseId: 'e1', exerciseName: 'ベンチプレス', kind: 'strength' },
+        // 筋トレなのに時間だけ（保存時に落ちて空になる）
+        { id: 'c', date: '2026-09-02', exerciseId: 'e1', exerciseName: 'ベンチプレス', kind: 'strength', minutes: 30 },
+      ]),
+    );
+    const result = loadTrainings();
+    expect(result.data).toEqual([valid]);
+    expect(result.problem).toBe(true);
+    // 読めなかった元データは退避する
+    expect(localStorage.getItem(TRAININGS_KEY + BROKEN_SUFFIX)).not.toBeNull();
   });
 });

@@ -104,14 +104,18 @@ export function isTrainingRecord(value: unknown): value is TrainingRecord {
     return false;
   }
   if (t.memo !== undefined && t.memo !== null && typeof t.memo !== 'string') return false;
-  // 数値の項目は、あればその種類で使うものだけを正しい範囲で持つ
-  return TRAINING_FIELD_ORDER.every((key) => {
+  // 数値の項目は、あれば正しい範囲で持つ
+  const inRange = TRAINING_FIELD_ORDER.every((key) => {
     const value = t[key];
     if (value === undefined || value === null) return true;
     if (!isFiniteNumber(value)) return false;
     const field = TRAINING_FIELDS[key];
     return value >= field.hardMin && value <= field.hardMax;
   });
+  if (!inRange) return false;
+  // その種類で使う項目の値が1つもなければ、中身のない記録として読み飛ばす
+  // （normalizeTraining が使わない項目を落とすため、空の記録が残ってしまう）
+  return KINDS[t.kind].fields.some((key) => isFiniteNumber(t[key]));
 }
 
 export function normalizeTraining(t: TrainingRecord): TrainingRecord {

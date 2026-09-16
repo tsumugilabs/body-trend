@@ -3,6 +3,7 @@ import type { BodyRecord, Exercise, GoalSettings, TrainingRecord } from '../type
 import {
   backupFileName,
   createBackup,
+  exercisesLostByRestore,
   parseBackup,
   recordsLostByRestore,
   trainingsLostByRestore,
@@ -22,6 +23,7 @@ type RestoreProps = {
   records: BodyRecord[];
   goal: GoalSettings | null;
   trainings: TrainingRecord[];
+  exercises: Exercise[];
   notify: Notify;
   onRestore: (data: BackupData) => void;
   label?: string;
@@ -33,6 +35,7 @@ export function RestoreButton({
   records,
   goal,
   trainings,
+  exercises,
   notify,
   onRestore,
   label = 'バックアップから復元',
@@ -60,10 +63,11 @@ export function RestoreButton({
     }
 
     const data = result.data;
-    const hasCurrent = records.length > 0 || trainings.length > 0;
+    const hasCurrent = records.length > 0 || trainings.length > 0 || exercises.length > 0;
     // 件数ではなく、置き換えで実際に消えるもの（バックアップに同じ日付・id がないもの）で判断する
     const lost = recordsLostByRestore(records, data.records);
     const lostTrainings = trainingsLostByRestore(trainings, data.trainings);
+    const lostExercises = exercisesLostByRestore(exercises, data.exercises);
     const lostRange =
       lost.length === 0
         ? ''
@@ -83,7 +87,7 @@ export function RestoreButton({
               <>
                 <dt>現在の記録（置き換えられます）</dt>
                 <dd>
-                  記録 {records.length}件 ・ トレーニング {trainings.length}件
+                  記録 {records.length}件 ・ トレーニング {trainings.length}件 ・ マイメニュー {exercises.length}件
                 </dd>
               </>
             )}
@@ -100,6 +104,11 @@ export function RestoreButton({
               現在のトレーニング記録のうち {lostTrainings.length}件 はバックアップに含まれないため消えます。
             </p>
           )}
+          {lostExercises.length > 0 && (
+            <p className="dialog-warning">
+              マイメニューの {lostExercises.length}件（{lostExercises.map((e) => e.name).join('・')}）はバックアップに含まれないため消えます。
+            </p>
+          )}
           {data.skipped > 0 && <p>読み込めない記録 {data.skipped}件 は除外されます。</p>}
           {data.skippedTrainings > 0 && (
             <p>読み込めないトレーニング関連のデータ {data.skippedTrainings}件 は除外されます。</p>
@@ -108,7 +117,8 @@ export function RestoreButton({
       ),
       confirmLabel: '復元する',
       danger: hasCurrent,
-      requireText: lost.length > 0 || lostTrainings.length > 0 ? '復元' : undefined,
+      requireText:
+        lost.length > 0 || lostTrainings.length > 0 || lostExercises.length > 0 ? '復元' : undefined,
     });
     if (ok) onRestore(data);
   };
@@ -242,6 +252,7 @@ export function DataProtection({
         records={records}
         goal={goal}
         trainings={trainings}
+        exercises={exercises}
         notify={notify}
         onRestore={onRestore}
       />

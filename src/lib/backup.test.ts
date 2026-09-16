@@ -47,6 +47,23 @@ describe('backup', () => {
     expect(backupFileName('2026-09-14')).toBe('body-trend-backup-2026-09-14.json');
   });
 
+  it('古いアプリでも読めるよう、書き出す version は上げない', () => {
+    const text = createBackup({ records, goal, trainings, exercises });
+    const raw = JSON.parse(text) as Record<string, unknown>;
+    // version を上げると、上限が 1 の古いアプリがファイルごと読めなくなる
+    expect(raw.version).toBe(1);
+    expect(raw.trainings).toHaveLength(1);
+    expect(raw.exercises).toHaveLength(1);
+  });
+
+  it('この先キーが増えた version 2 のファイルも読み込める', () => {
+    const result = parseBackup(
+      JSON.stringify({ app: 'body-trend', version: 2, records, goal, trainings, exercises }),
+    );
+    expect(result.ok).toBe(true);
+    expect(parseBackup(JSON.stringify({ app: 'body-trend', version: 3, records })).ok).toBe(false);
+  });
+
   it('トレーニングがない古いバックアップ（version 1）も読み込める', () => {
     const result = parseBackup(JSON.stringify({ app: 'body-trend', version: 1, records, goal }));
     if (!result.ok) throw new Error('should parse');
@@ -70,14 +87,19 @@ describe('backup', () => {
         version: 2,
         records,
         goal,
-        trainings: [...trainings, { id: 'x', date: '2026-09-02', exerciseId: 'e1' }],
+        trainings: [
+          ...trainings,
+          { id: 'x', date: '2026-09-02', exerciseId: 'e1' },
+          // 種類で使う項目の値がなく、中身が空になる記録
+          { id: 'z', date: '2026-09-02', exerciseId: 'e1', exerciseName: 'ベンチプレス', kind: 'strength' },
+        ],
         exercises: [...exercises, { id: 'y', name: '', kind: 'strength' }],
       }),
     );
     if (!result.ok) throw new Error('should parse');
     expect(result.data.trainings).toEqual(trainings);
     expect(result.data.exercises).toEqual(exercises);
-    expect(result.data.skippedTrainings).toBe(2);
+    expect(result.data.skippedTrainings).toBe(3);
   });
 
   it('復元で消えるトレーニングを id で見つける', () => {

@@ -228,6 +228,7 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
             today={today}
             records={data.records}
             trainings={data.trainings}
+            exercises={data.exercises}
             notify={notify}
             onSubmit={(g) => handleSaveGoal(g, true)}
             onRestore={handleRestore}

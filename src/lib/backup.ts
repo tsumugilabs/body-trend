@@ -8,8 +8,14 @@ import {
 } from './storage';
 
 export const BACKUP_APP = 'body-trend';
-/** 2: トレーニング記録とマイメニューを追加（1 のファイルもそのまま読み込める） */
-export const BACKUP_VERSION = 2;
+/**
+ * 書き出すときの形式。
+ * トレーニングとマイメニューは増えたキーなので、知らないアプリは読み飛ばすだけで済む。
+ * 古いアプリは version が大きいファイルをまるごと拒否するため、1 のままにしておく。
+ */
+export const BACKUP_VERSION = 1;
+/** 読み込める形式の上限（この先キーが増えて 2 になったファイルも読めるようにしておく） */
+export const BACKUP_MAX_VERSION = 2;
 
 /** この件数以上データがあり、前回バックアップから一定日数たつとバックアップを促す */
 export const BACKUP_REMIND_MIN_RECORDS = 7;
@@ -66,13 +72,13 @@ export function parseBackup(text: string): ParseBackupResult {
   if (obj.app !== BACKUP_APP || !Array.isArray(obj.records)) {
     return { ok: false, error: 'このアプリのバックアップファイルではありません' };
   }
-  if (typeof obj.version !== 'number' || obj.version > BACKUP_VERSION) {
+  if (typeof obj.version !== 'number' || obj.version > BACKUP_MAX_VERSION) {
     return { ok: false, error: '新しいバージョンのアプリで作られたバックアップのため読み込めません' };
   }
 
   const { records, skipped } = sanitizeRecords(obj.records);
   const goal = isGoalSettings(obj.goal) ? normalizeGoal(obj.goal) : null;
-  // トレーニングは version 2 から。古いバックアップには入っていない
+  // トレーニングはあとから増えたキー。古いバックアップには入っていない
   const training = sanitizeTrainings(Array.isArray(obj.trainings) ? obj.trainings : []);
   const exercise = sanitizeExercises(Array.isArray(obj.exercises) ? obj.exercises : []);
   if (records.length === 0 && goal === null && training.trainings.length === 0) {
@@ -112,6 +118,11 @@ export function trainingsLostByRestore(
   next: TrainingRecord[],
 ): TrainingRecord[] {
   return lostByRestore(current, next, (t) => t.id);
+}
+
+/** マイメニューも復元で置き換わるので、消えるものを数える */
+export function exercisesLostByRestore(current: Exercise[], next: Exercise[]): Exercise[] {
+  return lostByRestore(current, next, (e) => e.id);
 }
 
 /** itemCount: 記録とトレーニング記録を合わせた件数 */

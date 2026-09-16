@@ -483,6 +483,29 @@ describe('App', () => {
     expect(storedExercises()).toMatchObject([{ name: 'ベンチプレス' }]);
   });
 
+  it('復元で消えるマイメニューも確認に出す', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    localStorage.setItem(EXERCISES_KEY, JSON.stringify([bench]));
+    render(<App enableSample={false} />);
+    await user.click(screen.getByRole('button', { name: '設定' }));
+
+    // トレーニングを知らない古いバックアップは、マイメニューを空にしてしまう
+    const backup = JSON.stringify({
+      app: 'body-trend',
+      version: 1,
+      records: [{ id: 'a', date: yesterday, weight: 71 }],
+      goal: null,
+    });
+    await user.upload(screen.getByLabelText('バックアップファイルを選択'), new File([backup], 'b.json'));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/マイメニューの 1件（ベンチプレス）/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '復元する' })).toBeDisabled();
+    await user.click(within(dialog).getByRole('button', { name: 'キャンセル' }));
+    expect(storedExercises()).toHaveLength(1);
+  });
+
   it('保存データが壊れていてもアプリを表示する', () => {
     localStorage.setItem(RECORDS_KEY, 'broken');
     localStorage.setItem(GOAL_KEY, '{"startDate":1}');
