@@ -66,7 +66,7 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
         notify(SAVE_FAILED, { tone: 'error' });
         return;
       }
-      notify(kept > 0 ? `元に戻しました（そのあとの記録 ${kept}件 は残しています）` : '元に戻しました', {
+      notify(kept > 0 ? `元に戻しました（そのあとの変更 ${kept}件 は残しています）` : '元に戻しました', {
         tone: 'info',
       });
     },

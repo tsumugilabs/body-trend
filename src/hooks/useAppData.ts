@@ -110,7 +110,7 @@ export function useAppData() {
 
   /**
    * replaceAll を取り消す。取り消せるあいだに別の画面が加えた変更は巻き戻さずに残す。
-   * @returns kept 残した（この操作のあとに加わった）記録の件数
+   * @returns kept 残した（この操作のあとの）変更の件数
    */
   const undoReplaceAll = useCallback(
     (before: DataSnapshot, applied: DataSnapshot): { ok: boolean; kept: number } => {

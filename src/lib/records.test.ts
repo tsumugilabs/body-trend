@@ -44,6 +44,15 @@ describe('undoReplaceRecords', () => {
     expect(result.kept).toBe(1);
   });
 
+  it('取り消すまでのあいだに別の画面が削除した記録は復活させない', () => {
+    // 復元などで base と applied の両方にある日付を、別の画面が消した場合
+    const applied = [record('2026-09-01', 70), record('2026-09-05', 68)];
+    const current = [record('2026-09-05', 68)];
+    const result = undoReplaceRecords(before, applied, current);
+    expect(result.records).toEqual([record('2026-09-02', 69.8)]);
+    expect(result.kept).toBe(1);
+  });
+
   it('操作が書き込んだままの記録は元に戻す', () => {
     const applied = [record('2026-09-05', 68)];
     const result = undoReplaceRecords(before, applied, applied);

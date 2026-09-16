@@ -217,7 +217,7 @@ describe('App', () => {
     localStorage.setItem(RECORDS_KEY, JSON.stringify([{ id: 'other', date: today, weight: 70.2 }]));
 
     await user.click(screen.getByRole('button', { name: '元に戻す' }));
-    expect(await screen.findByText(/元に戻しました（そのあとの記録 1件 は残しています）/)).toBeInTheDocument();
+    expect(await screen.findByText(/元に戻しました（そのあとの変更 1件 は残しています）/)).toBeInTheDocument();
     expect(storedRecords()).toMatchObject([
       { id: 'a', date: yesterday, weight: 71 },
       { id: 'other', date: today, weight: 70.2 },
