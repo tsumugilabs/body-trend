@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
-import { GOAL_KEY, META_KEY, RECORDS_KEY } from './lib/storage';
+import { EXERCISES_KEY, GOAL_KEY, META_KEY, RECORDS_KEY, TRAININGS_KEY } from './lib/storage';
 import { addDays, todayString } from './lib/date';
 import { readTextFile } from './lib/fileSave';
 
@@ -18,6 +18,28 @@ function seedGoal() {
 
 const storedRecords = () => JSON.parse(localStorage.getItem(RECORDS_KEY) ?? '[]') as unknown[];
 const storedMeta = () => JSON.parse(localStorage.getItem(META_KEY) ?? '{}') as { lastBackupAt?: string };
+const storedTrainings = () => JSON.parse(localStorage.getItem(TRAININGS_KEY) ?? '[]') as unknown[];
+const storedExercises = () => JSON.parse(localStorage.getItem(EXERCISES_KEY) ?? '[]') as unknown[];
+
+const bench = { id: 'e1', name: 'ベンチプレス', kind: 'strength' };
+function seedTraining() {
+  localStorage.setItem(EXERCISES_KEY, JSON.stringify([bench]));
+  localStorage.setItem(
+    TRAININGS_KEY,
+    JSON.stringify([
+      {
+        id: 't1',
+        date: today,
+        exerciseId: 'e1',
+        exerciseName: 'ベンチプレス',
+        kind: 'strength',
+        weight: 60,
+        reps: 10,
+        sets: 3,
+      },
+    ]),
+  );
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -338,6 +360,150 @@ describe('App', () => {
     expect(within(dialog).getByRole('button', { name: '復元する' })).toBeDisabled();
     await user.click(within(dialog).getByRole('button', { name: 'キャンセル' }));
     expect(storedRecords()).toHaveLength(2);
+  });
+
+  it('マイメニューに種目を追加し、トレーニングを記録できる', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    render(<App enableSample={false} />);
+
+    await user.click(screen.getByRole('button', { name: 'トレーニング' }));
+    expect(screen.getByText('まだトレーニングの記録がありません')).toBeInTheDocument();
+
+    // 種目がないうちは記録できず、マイメニューへ案内する
+    await user.click(screen.getByRole('button', { name: 'トレーニングを追加' }));
+    expect(screen.getByText('先にマイメニューへ種目を登録してください')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'マイメニューを開く' }));
+
+    await user.click(screen.getByRole('button', { name: '＋ ベンチプレス' }));
+    expect(await screen.findByText('「ベンチプレス」を追加しました')).toBeInTheDocument();
+    expect(storedExercises()).toMatchObject([{ name: 'ベンチプレス', kind: 'strength' }]);
+
+    await user.click(screen.getByRole('button', { name: '記録' }));
+    await user.click(screen.getByRole('button', { name: 'トレーニングを追加' }));
+    await user.selectOptions(screen.getByLabelText(/種目/), 'ベンチプレス');
+    await user.type(screen.getByLabelText(/重量/), '60');
+    await user.type(screen.getByLabelText(/回数/), '10');
+    await user.type(screen.getByLabelText(/セット数/), '3');
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(await screen.findByText('トレーニングを記録しました')).toBeInTheDocument();
+    expect(screen.getByText('60.0kg × 10回 × 3セット')).toBeInTheDocument();
+    expect(storedTrainings()).toMatchObject([
+      { date: today, exerciseName: 'ベンチプレス', kind: 'strength', weight: 60, reps: 10, sets: 3 },
+    ]);
+  });
+
+  it('内容を1つも入力しないと保存できない', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    seedTraining();
+    render(<App enableSample={false} />);
+
+    await user.click(screen.getByRole('button', { name: 'トレーニング' }));
+    await user.click(screen.getByRole('button', { name: 'トレーニングを追加' }));
+    await user.selectOptions(screen.getByLabelText(/種目/), 'ベンチプレス');
+    await user.click(screen.getByRole('button', { name: '保存する' }));
+
+    expect(screen.getByText('内容を1つ以上入力してください')).toBeInTheDocument();
+    expect(storedTrainings()).toHaveLength(1);
+  });
+
+  it('トレーニングの削除は確認してから、元に戻せる', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    seedTraining();
+    render(<App enableSample={false} />);
+
+    await user.click(screen.getByRole('button', { name: 'トレーニング' }));
+    await user.click(screen.getByRole('button', { name: /ベンチプレスを削除/ }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/60.0kg × 10回 × 3セット/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: '削除する' }));
+
+    expect(await screen.findByText('「ベンチプレス」の記録を削除しました')).toBeInTheDocument();
+    expect(storedTrainings()).toEqual([]);
+
+    await user.click(screen.getByRole('button', { name: '元に戻す' }));
+    expect(await screen.findByText('削除を取り消しました')).toBeInTheDocument();
+    expect(storedTrainings()).toHaveLength(1);
+  });
+
+  it('マイメニューから種目を消しても、その記録は残る', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    seedTraining();
+    render(<App enableSample={false} />);
+
+    await user.click(screen.getByRole('button', { name: 'トレーニング' }));
+    await user.click(screen.getByRole('button', { name: 'マイメニュー' }));
+    await user.click(screen.getByRole('button', { name: 'ベンチプレスをマイメニューから消す' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/記録 1件 はそのまま残ります/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: '消す' }));
+
+    expect(await screen.findByText('「ベンチプレス」をマイメニューから消しました')).toBeInTheDocument();
+    expect(storedExercises()).toEqual([]);
+    expect(storedTrainings()).toHaveLength(1);
+  });
+
+  it('バックアップと復元でトレーニングも一緒に運べる', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    seedTraining();
+
+    const blobs: Blob[] = [];
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      blobs.push(blob);
+      return 'blob:backup';
+    }) as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    const { unmount } = render(<App enableSample={false} />);
+    await user.click(screen.getByRole('button', { name: '設定' }));
+    await user.click(screen.getByRole('button', { name: 'バックアップを保存' }));
+    expect(await screen.findByText('バックアップファイルを保存しました')).toBeInTheDocument();
+    const backupText = await readTextFile(blobs[0]);
+
+    unmount();
+    localStorage.clear();
+    render(<App enableSample={false} />);
+    await user.upload(
+      screen.getByLabelText('バックアップファイルを選択'),
+      new File([backupText], 'body-trend-backup.json'),
+    );
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: '復元する' }));
+
+    expect(await screen.findByText(/バックアップから復元しました/)).toBeInTheDocument();
+    expect(storedTrainings()).toMatchObject([{ exerciseName: 'ベンチプレス', weight: 60 }]);
+    expect(storedExercises()).toMatchObject([{ name: 'ベンチプレス' }]);
+  });
+
+  it('復元で消えるマイメニューも確認に出す', async () => {
+    const user = userEvent.setup();
+    seedGoal();
+    localStorage.setItem(EXERCISES_KEY, JSON.stringify([bench]));
+    render(<App enableSample={false} />);
+    await user.click(screen.getByRole('button', { name: '設定' }));
+
+    // トレーニングを知らない古いバックアップは、マイメニューを空にしてしまう
+    const backup = JSON.stringify({
+      app: 'body-trend',
+      version: 1,
+      records: [{ id: 'a', date: yesterday, weight: 71 }],
+      goal: null,
+    });
+    await user.upload(screen.getByLabelText('バックアップファイルを選択'), new File([backup], 'b.json'));
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText(/マイメニューの 1件（ベンチプレス）/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '復元する' })).toBeDisabled();
+    await user.click(within(dialog).getByRole('button', { name: 'キャンセル' }));
+    expect(storedExercises()).toHaveLength(1);
   });
 
   it('保存データが壊れていてもアプリを表示する', () => {

@@ -1,5 +1,6 @@
 import type { BodyRecord } from '../types';
 import { METRIC_ORDER } from './metrics';
+import { undoReplaceItems } from './undo';
 
 export function createId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -50,25 +51,9 @@ export function undoReplaceRecords(
   applied: BodyRecord[],
   current: BodyRecord[],
 ): { records: BodyRecord[]; kept: number } {
-  const appliedByDate = new Map(applied.map((r) => [r.date, r]));
-  const currentDates = new Set(current.map((r) => r.date));
-  const byDate = new Map(base.map((r) => [r.date, r]));
-  let kept = 0;
-
-  // 操作のあとに別の画面が削除した記録（操作が書き込んだのに、いまはない日付）は復活させない
-  for (const record of applied) {
-    if (!currentDates.has(record.date) && byDate.delete(record.date)) kept++;
-  }
-
-  for (const record of current) {
-    const written = appliedByDate.get(record.date);
-    // 操作が書き込んだままの記録は、元の内容に戻す
-    if (written && sameMeasurements(written, record)) continue;
-    byDate.set(record.date, record);
-    kept++;
-  }
-
-  return { records: sortRecords([...byDate.values()]), kept };
+  // 記録は日付ごとに1件なので、日付を手がかりに同じ記録かを判断する
+  const { items, kept } = undoReplaceItems(base, applied, current, (r) => r.date, sameMeasurements);
+  return { records: sortRecords(items), kept };
 }
 
 /** 指定日より前で最も新しい記録 */

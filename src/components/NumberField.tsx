@@ -85,3 +85,57 @@ export function DateField({ id, label, value, onChange, error, min, max, hint }:
     </div>
   );
 }
+
+type TextProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  required?: boolean;
+  placeholder?: string;
+  maxLength?: number;
+  hint?: string;
+};
+
+export function TextField({
+  id,
+  label,
+  value,
+  onChange,
+  error,
+  required,
+  placeholder,
+  maxLength,
+  hint,
+}: TextProps) {
+  const errorId = `${id}-error`;
+  return (
+    <div className="field">
+      <label htmlFor={id} className="field-label">
+        {label}
+        <span className={required ? 'badge-required' : 'badge-optional'}>{required ? '必須' : '任意'}</span>
+      </label>
+      <input
+        id={id}
+        className={`text-input ${error ? 'has-error' : ''}`}
+        type="text"
+        autoComplete="off"
+        enterKeyHint="done"
+        maxLength={maxLength}
+        value={value}
+        placeholder={placeholder}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {error ? (
+        <p className="field-error" id={errorId}>
+          {error}
+        </p>
+      ) : (
+        hint && <p className="field-hint">{hint}</p>
+      )}
+    </div>
+  );
+}

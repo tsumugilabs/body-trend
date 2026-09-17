@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { BodyRecord, GoalSettings, TabKey } from './types';
-import { useAppData, type DataSnapshot } from './hooks/useAppData';
+import type { BodyRecord, Exercise, TrainingRecord, GoalSettings, TabKey } from './types';
+import { useAppData, type AppContents, type DataSnapshot } from './hooks/useAppData';
 import { useToday } from './hooks/useToday';
 import { createSampleData } from './lib/sampleData';
 import { isBackupDue, type BackupData } from './lib/backup';
@@ -13,6 +13,7 @@ import { Dashboard } from './screens/Dashboard';
 import { RecordForm } from './screens/RecordForm';
 import { History } from './screens/History';
 import { Settings } from './screens/Settings';
+import { Training } from './screens/Training';
 import { Onboarding } from './screens/Onboarding';
 
 type AppProps = {
@@ -36,6 +37,7 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
   const [tab, setTab] = useState<TabKey>('home');
   const [editing, setEditing] = useState<BodyRecord | null>(null);
   const [formKey, setFormKey] = useState(0);
+  const [trainingKey, setTrainingKey] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [showLoadProblem, setShowLoadProblem] = useState(data.loadProblem);
 
@@ -53,6 +55,7 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
   const navigate = (next: TabKey) => {
     setTab(next);
     if (next !== 'record') setEditing(null);
+    if (next === 'training') setTrainingKey((k) => k + 1);
     setFormKey((k) => k + 1);
     window.scrollTo({ top: 0 });
   };
@@ -77,21 +80,19 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
    * hadData: 置き換える前にデータがあったか（なければ取り消しは不要）
    */
   const replaceAll = (
-    nextRecords: BodyRecord[],
-    nextGoal: GoalSettings | null,
+    next: AppContents,
     options: { clearBackupMark?: boolean } = {},
   ): { ok: boolean; undo: ToastAction; hadData: boolean } => {
     const before = data.snapshot();
-    const ok = data.replaceAll(nextRecords, nextGoal, options);
+    const ok = data.replaceAll(next, options);
     const applied: DataSnapshot = {
-      records: nextRecords,
-      goal: nextGoal,
+      ...next,
       lastBackupAt: options.clearBackupMark ? undefined : before.lastBackupAt,
     };
     return {
       ok,
       undo: undoReplace(before, applied),
-      hadData: before.records.length > 0 || before.goal !== null,
+      hadData: before.records.length > 0 || before.goal !== null || before.trainings.length > 0,
     };
   };
 
@@ -127,8 +128,60 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
     if (fromOnboarding) navigate('home');
   };
 
+  const handleSaveTraining = (training: TrainingRecord, mode: 'created' | 'updated') => {
+    const ok = data.saveTraining(training);
+    if (!ok) notify(SAVE_FAILED, { tone: 'error' });
+    else notify(mode === 'updated' ? 'トレーニングを更新しました' : 'トレーニングを記録しました');
+    window.scrollTo({ top: 0 });
+  };
+
+  const handleDeleteTraining = (training: TrainingRecord) => {
+    const ok = data.deleteTraining(training.id);
+    if (!ok) {
+      notify(SAVE_FAILED, { tone: 'error' });
+      return;
+    }
+    notify(`「${training.exerciseName}」の記録を削除しました`, {
+      action: {
+        label: '元に戻す',
+        onClick: () => {
+          const restored = data.saveTraining(training);
+          notify(restored ? '削除を取り消しました' : SAVE_FAILED, { tone: restored ? 'info' : 'error' });
+        },
+      },
+    });
+  };
+
+  const handleSaveExercise = (exercise: Exercise, mode: 'created' | 'updated') => {
+    const ok = data.saveExercise(exercise);
+    if (!ok) notify(SAVE_FAILED, { tone: 'error' });
+    else if (mode === 'updated') notify(`「${exercise.name}」を更新しました`);
+  };
+
+  const handleDeleteExercise = (exercise: Exercise) => {
+    const ok = data.deleteExercise(exercise.id);
+    if (!ok) {
+      notify(SAVE_FAILED, { tone: 'error' });
+      return;
+    }
+    notify(`「${exercise.name}」をマイメニューから消しました`, {
+      action: {
+        label: '元に戻す',
+        onClick: () => {
+          const restored = data.saveExercise(exercise);
+          notify(restored ? '元に戻しました' : SAVE_FAILED, { tone: restored ? 'info' : 'error' });
+        },
+      },
+    });
+  };
+
   const handleRestore = (backup: BackupData) => {
-    const { ok, undo, hadData } = replaceAll(backup.records, backup.goal ?? data.goal);
+    const { ok, undo, hadData } = replaceAll({
+      records: backup.records,
+      goal: backup.goal ?? data.goal,
+      trainings: backup.trainings,
+      exercises: backup.exercises,
+    });
     navigate('home');
     if (!ok) notify(SAVE_FAILED, { tone: 'error' });
     else
@@ -139,7 +192,10 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
 
   const handleClearAll = () => {
     // 最終バックアップ日時も消す（残すと、消したデータのバックアップを最新として扱ってしまう）
-    const { ok, undo } = replaceAll([], null, { clearBackupMark: true });
+    const { ok, undo } = replaceAll(
+      { records: [], goal: null, trainings: [], exercises: [] },
+      { clearBackupMark: true },
+    );
     navigate('home');
     if (!ok) notify(SAVE_FAILED, { tone: 'error' });
     else notify('すべてのデータを削除しました', { action: undo });
@@ -148,7 +204,7 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
   const loadSample = enableSample
     ? () => {
         const sample = createSampleData(today);
-        const { undo, hadData } = replaceAll(sample.records, sample.goal);
+        const { undo, hadData } = replaceAll(sample);
         navigate('home');
         notify('サンプルデータを読み込みました', { action: hadData ? undo : undefined });
       }
@@ -171,6 +227,8 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
           <Onboarding
             today={today}
             records={data.records}
+            trainings={data.trainings}
+            exercises={data.exercises}
             notify={notify}
             onSubmit={(g) => handleSaveGoal(g, true)}
             onRestore={handleRestore}
@@ -192,7 +250,13 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
             goal={data.goal}
             today={today}
             onRecord={() => navigate('record')}
-            backupDue={isBackupDue(data.records.length, data.lastBackupAt, Date.now())}
+            trainings={data.trainings}
+            onTraining={() => navigate('training')}
+            backupDue={isBackupDue(
+              data.records.length + data.trainings.length,
+              data.lastBackupAt,
+              Date.now(),
+            )}
             lastBackupAt={data.lastBackupAt}
             onOpenBackup={() => navigate('settings')}
           />
@@ -205,6 +269,19 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
             editing={editing}
             onSave={handleSaveRecord}
             onCancel={() => navigate('history')}
+          />
+        )}
+        {tab === 'training' && (
+          <Training
+            key={trainingKey}
+            trainings={data.trainings}
+            exercises={data.exercises}
+            today={today}
+            notify={notify}
+            onSaveTraining={handleSaveTraining}
+            onDeleteTraining={handleDeleteTraining}
+            onSaveExercise={handleSaveExercise}
+            onDeleteExercise={handleDeleteExercise}
           />
         )}
         {tab === 'history' && (
@@ -224,6 +301,8 @@ function AppInner({ enableSample }: { enableSample: boolean }) {
           <Settings
             goal={data.goal}
             records={data.records}
+            trainings={data.trainings}
+            exercises={data.exercises}
             today={today}
             lastBackupAt={data.lastBackupAt}
             notify={notify}

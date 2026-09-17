@@ -56,3 +56,9 @@ export const TrashIcon = () => (
     <path d="M6 7l1 13h10l1-13M9 7V4h6v3" />
   </svg>
 );
+
+export const DumbbellIcon = () => (
+  <svg {...base}>
+    <path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10" />
+  </svg>
+);

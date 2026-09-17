@@ -717,7 +717,7 @@ h2 {
   bottom: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   background: #fff;
   border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
@@ -732,8 +732,9 @@ h2 {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
   color: #8a9998;
   cursor: pointer;
   touch-action: manipulation;
@@ -973,4 +974,161 @@ h2 {
   .field-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---------- トレーニング ---------- */
+.text-input,
+.select-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 12px;
+  font-size: 16px;
+  color: var(--text);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.select-input {
+  /* 端末標準の矢印が消えるので自前で描く */
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) calc(50% + 2px),
+    calc(100% - 14px) calc(50% + 2px);
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 40px;
+}
+
+.text-input:focus,
+.select-input:focus {
+  border-color: var(--primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(15, 143, 134, 0.15);
+}
+
+.training-day {
+  display: grid;
+  gap: 8px;
+}
+
+.training-date {
+  font-size: 15px;
+  font-weight: 700;
+  padding: 0 2px;
+  margin-top: 4px;
+}
+
+.exercise-name {
+  font-size: 17px;
+  font-weight: 700;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.training-summary {
+  grid-column: 1 / -1;
+  font-size: 14px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.training-memo {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.kind-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.kind-strength {
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+}
+
+.kind-cardio {
+  background: #e9f0fb;
+  color: var(--blue);
+}
+
+.kind-sport {
+  background: #f1ecfa;
+  color: #5b46a5;
+}
+
+.chip-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  min-height: 40px;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--primary-dark);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.chip:focus-visible {
+  outline: 3px solid rgba(15, 143, 134, 0.35);
+  outline-offset: 2px;
+}
+
+.today-training {
+  display: grid;
+  gap: 10px;
+}
+
+.today-training .btn {
+  justify-self: start;
+}
+
+.today-training-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  font-size: 14px;
+}
+
+.today-training-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.today-training-list .exercise-name {
+  font-size: 15px;
+  display: inline;
+}
+
+.today-training-list .training-summary {
+  color: var(--muted);
+  text-align: right;
 }

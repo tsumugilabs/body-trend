@@ -1,28 +1,52 @@
-import type { BodyRecord, GoalSettings } from '../types';
-import { isGoalSettings, normalizeGoal, sanitizeRecords } from './storage';
+import type { BodyRecord, Exercise, GoalSettings, TrainingRecord } from '../types';
+import {
+  isGoalSettings,
+  normalizeGoal,
+  sanitizeExercises,
+  sanitizeRecords,
+  sanitizeTrainings,
+} from './storage';
 
 export const BACKUP_APP = 'body-trend';
+/**
+ * 書き出すときの形式。
+ * トレーニングとマイメニューは増えたキーなので、知らないアプリは読み飛ばすだけで済む。
+ * 古いアプリは version が大きいファイルをまるごと拒否するため、1 のままにしておく。
+ */
 export const BACKUP_VERSION = 1;
+/** 読み込める形式の上限（この先キーが増えて 2 になったファイルも読めるようにしておく） */
+export const BACKUP_MAX_VERSION = 2;
 
-/** この件数以上記録があり、前回バックアップから一定日数たつとバックアップを促す */
+/** この件数以上データがあり、前回バックアップから一定日数たつとバックアップを促す */
 export const BACKUP_REMIND_MIN_RECORDS = 7;
 export const BACKUP_REMIND_DAYS = 30;
 
-export type BackupData = {
+export type BackupContents = {
   records: BodyRecord[];
   goal: GoalSettings | null;
+  trainings: TrainingRecord[];
+  exercises: Exercise[];
+};
+
+export type BackupData = BackupContents & {
   exportedAt?: string;
   /** 読み込めずに除外した記録の件数 */
   skipped: number;
+  /** 読み込めずに除外したトレーニング記録とマイメニューの件数 */
+  skippedTrainings: number;
 };
 
-export function createBackup(
-  records: BodyRecord[],
-  goal: GoalSettings | null,
-  now: Date = new Date(),
-): string {
+export function createBackup(contents: BackupContents, now: Date = new Date()): string {
   return JSON.stringify(
-    { app: BACKUP_APP, version: BACKUP_VERSION, exportedAt: now.toISOString(), records, goal },
+    {
+      app: BACKUP_APP,
+      version: BACKUP_VERSION,
+      exportedAt: now.toISOString(),
+      records: contents.records,
+      goal: contents.goal,
+      trainings: contents.trainings,
+      exercises: contents.exercises,
+    },
     null,
     2,
   );
@@ -48,32 +72,62 @@ export function parseBackup(text: string): ParseBackupResult {
   if (obj.app !== BACKUP_APP || !Array.isArray(obj.records)) {
     return { ok: false, error: 'このアプリのバックアップファイルではありません' };
   }
-  if (typeof obj.version !== 'number' || obj.version > BACKUP_VERSION) {
+  if (typeof obj.version !== 'number' || obj.version > BACKUP_MAX_VERSION) {
     return { ok: false, error: '新しいバージョンのアプリで作られたバックアップのため読み込めません' };
   }
 
   const { records, skipped } = sanitizeRecords(obj.records);
   const goal = isGoalSettings(obj.goal) ? normalizeGoal(obj.goal) : null;
-  if (records.length === 0 && goal === null) {
+  // トレーニングはあとから増えたキー。古いバックアップには入っていない
+  const training = sanitizeTrainings(Array.isArray(obj.trainings) ? obj.trainings : []);
+  const exercise = sanitizeExercises(Array.isArray(obj.exercises) ? obj.exercises : []);
+  if (records.length === 0 && goal === null && training.trainings.length === 0) {
     return { ok: false, error: 'バックアップに読み込める記録がありません' };
   }
   const exportedAt =
     typeof obj.exportedAt === 'string' && !Number.isNaN(Date.parse(obj.exportedAt)) ? obj.exportedAt : undefined;
 
-  return { ok: true, data: { records, goal, exportedAt, skipped } };
+  return {
+    ok: true,
+    data: {
+      records,
+      goal,
+      trainings: training.trainings,
+      exercises: exercise.exercises,
+      exportedAt,
+      skipped,
+      skippedTrainings: training.skipped + exercise.skipped,
+    },
+  };
 }
 
-/**
- * 復元で置き換えたときに消える現在の記録。
- * 記録は日付ごとに1件なので、復元後の記録に同じ日付がないものが消える。
- */
+/** 復元で置き換えたときに消えるもの（復元後に同じ手がかりのものがない） */
+function lostByRestore<T>(current: T[], next: T[], keyOf: (item: T) => string): T[] {
+  const keys = new Set(next.map(keyOf));
+  return current.filter((item) => !keys.has(keyOf(item)));
+}
+
+/** 記録は日付ごとに1件なので、復元後の記録に同じ日付がないものが消える */
 export function recordsLostByRestore(current: BodyRecord[], next: BodyRecord[]): BodyRecord[] {
-  const dates = new Set(next.map((r) => r.date));
-  return current.filter((r) => !dates.has(r.date));
+  return lostByRestore(current, next, (r) => r.date);
 }
 
-export function isBackupDue(recordCount: number, lastBackupAt: string | undefined, now: number): boolean {
-  if (recordCount < BACKUP_REMIND_MIN_RECORDS) return false;
+/** トレーニングは1日に何件でも記録できるので、id で見る */
+export function trainingsLostByRestore(
+  current: TrainingRecord[],
+  next: TrainingRecord[],
+): TrainingRecord[] {
+  return lostByRestore(current, next, (t) => t.id);
+}
+
+/** マイメニューも復元で置き換わるので、消えるものを数える */
+export function exercisesLostByRestore(current: Exercise[], next: Exercise[]): Exercise[] {
+  return lostByRestore(current, next, (e) => e.id);
+}
+
+/** itemCount: 記録とトレーニング記録を合わせた件数 */
+export function isBackupDue(itemCount: number, lastBackupAt: string | undefined, now: number): boolean {
+  if (itemCount < BACKUP_REMIND_MIN_RECORDS) return false;
   if (!lastBackupAt) return true;
   const last = Date.parse(lastBackupAt);
   if (Number.isNaN(last)) return true;

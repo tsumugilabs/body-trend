@@ -1,11 +1,19 @@
-import type { BodyRecord, GoalSettings } from '../types';
+import type { BodyRecord, Exercise, TrainingRecord } from '../types';
+import type { AppContents } from '../hooks/useAppData';
 import { addDays } from './date';
+
+const SAMPLE_EXERCISES: Exercise[] = [
+  { id: 'sample-ex-bench', name: 'ベンチプレス', kind: 'strength' },
+  { id: 'sample-ex-squat', name: 'スクワット', kind: 'strength' },
+  { id: 'sample-ex-run', name: 'ランニング', kind: 'cardio' },
+  { id: 'sample-ex-swim', name: '水泳', kind: 'sport' },
+];
 
 /**
  * 開発時の動作確認用サンプルデータ。
  * 設定画面の「サンプルデータを読み込む」（開発サーバーでのみ表示）から使う。
  */
-export function createSampleData(today: string): { records: BodyRecord[]; goal: GoalSettings } {
+export function createSampleData(today: string): AppContents {
   const days = 75;
   const startDate = addDays(today, -days);
   const records: BodyRecord[] = [];
@@ -38,8 +46,50 @@ export function createSampleData(today: string): { records: BodyRecord[]; goal: 
     if (i % 7 === 0) record.waist = Math.round(waist * 10) / 10;
     records.push(record);
   }
+  // トレーニングは数日おきに、筋トレと有酸素を交互に
+  const trainings: TrainingRecord[] = [];
+  for (let i = 2; i <= days; i += 3) {
+    const date = addDays(startDate, i);
+    const progress = i / days;
+    if (i % 2 === 0) {
+      trainings.push({
+        id: `sample-tr-${i}-a`,
+        date,
+        exerciseId: 'sample-ex-bench',
+        exerciseName: 'ベンチプレス',
+        kind: 'strength',
+        weight: Math.round((50 + 10 * progress) * 2) / 2,
+        reps: 10,
+        sets: 3,
+      });
+      trainings.push({
+        id: `sample-tr-${i}-b`,
+        date,
+        exerciseId: 'sample-ex-squat',
+        exerciseName: 'スクワット',
+        kind: 'strength',
+        weight: Math.round((60 + 15 * progress) * 2) / 2,
+        reps: 8,
+        sets: 3,
+      });
+    } else {
+      trainings.push({
+        id: `sample-tr-${i}-a`,
+        date,
+        exerciseId: 'sample-ex-run',
+        exerciseName: 'ランニング',
+        kind: 'cardio',
+        minutes: 30,
+        distance: Math.round((4 + 2 * progress) * 10) / 10,
+        memo: i % 5 === 0 ? '調子よく走れた' : undefined,
+      });
+    }
+  }
+
   return {
     records,
+    trainings,
+    exercises: SAMPLE_EXERCISES,
     goal: {
       startDate,
       targetDate: addDays(today, 60),

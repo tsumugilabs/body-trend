@@ -1,4 +1,4 @@
-import type { BodyRecord, GoalSettings } from '../types';
+import type { BodyRecord, Exercise, GoalSettings, TrainingRecord } from '../types';
 import type { BackupData } from '../lib/backup';
 import { formatDateTime } from '../lib/date';
 import { useConfirm } from '../components/ConfirmDialog';
@@ -9,6 +9,8 @@ import { DataProtection } from './DataProtection';
 type Props = {
   goal: GoalSettings | null;
   records: BodyRecord[];
+  trainings: TrainingRecord[];
+  exercises: Exercise[];
   today: string;
   lastBackupAt?: string;
   notify: Notify;
@@ -22,6 +24,8 @@ type Props = {
 export function Settings({
   goal,
   records,
+  trainings,
+  exercises,
   today,
   lastBackupAt,
   notify,
@@ -39,7 +43,7 @@ export function Settings({
       message: (
         <>
           <p>
-            記録 {records.length}件 と目標設定を、この端末から削除します。
+            記録 {records.length}件、トレーニング {trainings.length}件、マイメニュー {exercises.length}件 と目標設定を、この端末から削除します。
           </p>
           <p className="dialog-warning">
             {lastBackupAt
@@ -83,6 +87,8 @@ export function Settings({
       <DataProtection
         records={records}
         goal={goal}
+        trainings={trainings}
+        exercises={exercises}
         today={today}
         lastBackupAt={lastBackupAt}
         notify={notify}
